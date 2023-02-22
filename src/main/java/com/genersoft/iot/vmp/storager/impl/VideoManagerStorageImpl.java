@@ -133,6 +133,15 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 					if (allChannelMap.containsKey(deviceChannel.getChannelId())) {
 						deviceChannel.setStreamId(allChannelMap.get(deviceChannel.getChannelId()).getStreamId());
 						deviceChannel.setHasAudio(allChannelMap.get(deviceChannel.getChannelId()).isHasAudio());
+						if (allChannelMap.get(deviceChannel.getChannelId()).getStatus() !=deviceChannel.getStatus()){
+							List<String> strings = platformChannelMapper.queryParentPlatformByChannelId(deviceChannel.getChannelId());
+							if (!CollectionUtils.isEmpty(strings)){
+								strings.forEach(platformId->{
+									eventPublisher.catalogEventPublish(platformId, deviceChannel, deviceChannel.getStatus()==1?CatalogEvent.ON:CatalogEvent.OFF);
+								});
+							}
+
+						}
 					}
 					channels.add(deviceChannel);
 					if (!ObjectUtils.isEmpty(deviceChannel.getParentId())) {
@@ -194,6 +203,121 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 
 	}
 
+
+	@Override
+	public boolean updateChannels(String deviceId, List<DeviceChannel> deviceChannelList) {
+		if (CollectionUtils.isEmpty(deviceChannelList)) {
+			return false;
+		}
+		List<DeviceChannel> allChannels = deviceChannelMapper.queryAllChannels(deviceId);
+		Map<String,DeviceChannel> allChannelMap = new ConcurrentHashMap<>();
+		if (allChannels.size() > 0) {
+			for (DeviceChannel deviceChannel : allChannels) {
+				allChannelMap.put(deviceChannel.getChannelId(), deviceChannel);
+			}
+		}
+		List<DeviceChannel> addChannels = new ArrayList<>();
+		List<DeviceChannel> updateChannels = new ArrayList<>();
+
+
+		TransactionStatus transactionStatus = dataSourceTransactionManager.getTransaction(transactionDefinition);
+		// 数据去重
+		StringBuilder stringBuilder = new StringBuilder();
+		Map<String, Integer> subContMap = new HashMap<>();
+		if (deviceChannelList.size() > 0) {
+			// 数据去重
+			Set<String> gbIdSet = new HashSet<>();
+			for (DeviceChannel deviceChannel : deviceChannelList) {
+				if (!gbIdSet.contains(deviceChannel.getChannelId())) {
+					gbIdSet.add(deviceChannel.getChannelId());
+					if (allChannelMap.containsKey(deviceChannel.getChannelId())) {
+						deviceChannel.setStreamId(allChannelMap.get(deviceChannel.getChannelId()).getStreamId());
+						deviceChannel.setHasAudio(allChannelMap.get(deviceChannel.getChannelId()).isHasAudio());
+						deviceChannel.setUpdateTime(DateUtil.getNow());
+						updateChannels.add(deviceChannel);
+					}else {
+						deviceChannel.setCreateTime(DateUtil.getNow());
+						addChannels.add(deviceChannel);
+					}
+					if (!ObjectUtils.isEmpty(deviceChannel.getParentId())) {
+						if (subContMap.get(deviceChannel.getParentId()) == null) {
+							subContMap.put(deviceChannel.getParentId(), 1);
+						}else {
+							Integer count = subContMap.get(deviceChannel.getParentId());
+							subContMap.put(deviceChannel.getParentId(), count++);
+						}
+					}
+				}else {
+					stringBuilder.append(deviceChannel.getChannelId()).append(",");
+				}
+			}
+			if (addChannels.size() > 0) {
+				for (DeviceChannel channel : addChannels) {
+					if (subContMap.get(channel.getChannelId()) != null){
+						channel.setSubCount(subContMap.get(channel.getChannelId()));
+					}
+				}
+			}
+			if (updateChannels.size() > 0) {
+				for (DeviceChannel channel : updateChannels) {
+					if (subContMap.get(channel.getChannelId()) != null){
+						channel.setSubCount(subContMap.get(channel.getChannelId()));
+					}
+				}
+			}
+
+		}
+		if (stringBuilder.length() > 0) {
+			logger.info("[目录查询]收到的数据存在重复： {}" , stringBuilder);
+		}
+		if(CollectionUtils.isEmpty(updateChannels) && CollectionUtils.isEmpty(addChannels) ){
+			logger.info("通道更新，数据为空={}" , deviceChannelList);
+			return false;
+		}
+		try {
+			int limitCount = 300;
+			boolean result = false;
+			if (addChannels.size() > 0) {
+				if (addChannels.size() > limitCount) {
+					for (int i = 0; i < addChannels.size(); i += limitCount) {
+						int toIndex = i + limitCount;
+						if (i + limitCount > addChannels.size()) {
+							toIndex = addChannels.size();
+						}
+						result = result || deviceChannelMapper.batchAdd(addChannels.subList(i, toIndex)) < 0;
+					}
+				}else {
+					result = result || deviceChannelMapper.batchAdd(addChannels) < 0;
+				}
+			}
+			if (updateChannels.size() > 0) {
+				if (updateChannels.size() > limitCount) {
+					for (int i = 0; i < updateChannels.size(); i += limitCount) {
+						int toIndex = i + limitCount;
+						if (i + limitCount > updateChannels.size()) {
+							toIndex = updateChannels.size();
+						}
+						result = result || deviceChannelMapper.batchUpdate(updateChannels.subList(i, toIndex)) < 0;
+					}
+				}else {
+					result = result || deviceChannelMapper.batchUpdate(updateChannels) < 0;
+				}
+			}
+			if (result) {
+				//事务回滚
+				dataSourceTransactionManager.rollback(transactionStatus);
+			}else {
+				//手动提交
+				dataSourceTransactionManager.commit(transactionStatus);
+			}
+			return true;
+		}catch (Exception e) {
+			e.printStackTrace();
+			dataSourceTransactionManager.rollback(transactionStatus);
+			return false;
+		}
+	}
+
 	@Override
 	public void deviceChannelOnline(String deviceId, String channelId) {
 		deviceChannelMapper.online(deviceId, channelId);
@@ -231,31 +355,31 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 		PageHelper.startPage(page, count);
 		List<DeviceChannel> all;
 		if (catalogUnderDevice != null && catalogUnderDevice) {
-			all = deviceChannelMapper.queryChannels(deviceId, deviceId, query, hasSubChannel, online);
+			all = deviceChannelMapper.queryChannels(deviceId, deviceId, query, hasSubChannel, online,null);
 			// 海康设备的parentId是SIP id
-			List<DeviceChannel> deviceChannels = deviceChannelMapper.queryChannels(deviceId, sipConfig.getId(), query, hasSubChannel, online);
+			List<DeviceChannel> deviceChannels = deviceChannelMapper.queryChannels(deviceId, sipConfig.getId(), query, hasSubChannel, online,null);
 			all.addAll(deviceChannels);
 		}else {
-			all = deviceChannelMapper.queryChannels(deviceId, null, query, hasSubChannel, online);
+			all = deviceChannelMapper.queryChannels(deviceId, null, query, hasSubChannel, online,null);
 		}
 		return new PageInfo<>(all);
 	}
 
 	@Override
-	public List<DeviceChannel> queryChannelsByDeviceIdWithStartAndLimit(String deviceId, String query, Boolean hasSubChannel, Boolean online, int start, int limit) {
-		return deviceChannelMapper.queryChannelsByDeviceIdWithStartAndLimit(deviceId, null, query, hasSubChannel, online, start, limit);
+	public List<DeviceChannel> queryChannelsByDeviceIdWithStartAndLimit(String deviceId, String query, Boolean hasSubChannel, Boolean online, int start, int limit,List<String> channelIds) {
+		return deviceChannelMapper.queryChannelsByDeviceIdWithStartAndLimit(deviceId, null, query, hasSubChannel, online, start, limit,channelIds);
 	}
 
 
 	@Override
-	public List<DeviceChannel> queryChannelsByDeviceId(String deviceId) {
-		return deviceChannelMapper.queryChannels(deviceId, null,null, null, null);
+	public List<DeviceChannel> queryChannelsByDeviceId(String deviceId,Boolean online,List<String> channelIds) {
+		return deviceChannelMapper.queryChannels(deviceId, null,null, null, online,channelIds);
 	}
 
 	@Override
 	public PageInfo<DeviceChannel> querySubChannels(String deviceId, String parentChannelId, String query, Boolean hasSubChannel, Boolean online, int page, int count) {
 		PageHelper.startPage(page, count);
-		List<DeviceChannel> all = deviceChannelMapper.queryChannels(deviceId, parentChannelId, query, hasSubChannel, online);
+		List<DeviceChannel> all = deviceChannelMapper.queryChannels(deviceId, parentChannelId, query, hasSubChannel, online,null);
 		return new PageInfo<>(all);
 	}
 
@@ -278,9 +402,9 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 	 * @return PageInfo<Device> 分页设备对象数组
 	 */
 	@Override
-	public PageInfo<Device> queryVideoDeviceList(int page, int count) {
+	public PageInfo<Device> queryVideoDeviceList(int page, int count,Boolean online) {
 		PageHelper.startPage(page, count);
-		List<Device> all = deviceMapper.getDevices();
+		List<Device> all = deviceMapper.getDevices(online);
 		return new PageInfo<>(all);
 	}
 
@@ -290,9 +414,9 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 	 * @return List<Device> 设备对象数组
 	 */
 	@Override
-	public List<Device> queryVideoDeviceList() {
+	public List<Device> queryVideoDeviceList(Boolean online) {
 
-		List<Device> deviceList =  deviceMapper.getDevices();
+		List<Device> deviceList =  deviceMapper.getDevices(online);
 		return deviceList;
 	}
 
@@ -469,6 +593,20 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 		}
 
 
+	}
+
+	@Override
+	public Device queryDeviceInfoByPlatformIdAndChannelId(String platformId, String channelId) {
+		List<Device> devices = platformChannelMapper.queryDeviceInfoByPlatformIdAndChannelId(platformId, channelId);
+		if (devices.size() > 1) {
+			// 出现长度大于0的时候肯定是国标通道的ID重复了
+			logger.warn("国标ID存在重复：{}", channelId);
+		}
+		if (devices.size() == 0) {
+			return null;
+		}else {
+			return devices.get(0);
+		}
 	}
 
 	/**

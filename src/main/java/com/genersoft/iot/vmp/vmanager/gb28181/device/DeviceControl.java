@@ -14,7 +14,6 @@ import com.genersoft.iot.vmp.gb28181.transmit.callback.DeferredResultHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
 import com.genersoft.iot.vmp.storager.IVideoManagerStorage;
-
 import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -22,10 +21,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.ObjectUtils;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
@@ -113,7 +110,7 @@ public class DeviceControl {
 				msg.setKey(key);
 				msg.setData(String.format("开始/停止录像操作失败，错误码： %s, %s", event.statusCode, event.msg));
 				resultHolder.invokeAllResult(msg);
-			});
+			},null);
 		} catch (InvalidArgumentException | SipException | ParseException e) {
 			logger.error("[命令发送失败] 开始/停止录像: {}", e.getMessage());
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
@@ -130,15 +127,14 @@ public class DeviceControl {
 	 */
 	@Operation(summary = "布防/撤防命令")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
-	@Parameter(name = "channelId", description = "通道国标编号", required = true)
 	@Parameter(name = "guardCmdStr", description = "命令， 可选值：SetGuard（布防），ResetGuard（撤防）", required = true)
 	@GetMapping("/guard/{deviceId}/{guardCmdStr}")
-	public DeferredResult<String> guardApi(@PathVariable String deviceId, String channelId, @PathVariable String guardCmdStr) {
+	public DeferredResult<String> guardApi(@PathVariable String deviceId, @PathVariable String guardCmdStr) {
 		if (logger.isDebugEnabled()) {
 			logger.debug("布防/撤防API调用");
 		}
 		Device device = storager.queryVideoDevice(deviceId);
-		String key = DeferredResultHolder.CALLBACK_CMD_DEVICECONTROL + deviceId + channelId;
+		String key = DeferredResultHolder.CALLBACK_CMD_DEVICECONTROL + deviceId + deviceId;
 		String uuid =UUID.randomUUID().toString();
 		try {
 			cmder.guardCmd(device, guardCmdStr, event -> {
@@ -147,7 +143,7 @@ public class DeviceControl {
 				msg.setKey(key);
 				msg.setData(String.format("布防/撤防操作失败，错误码： %s, %s", event.statusCode, event.msg));
 				resultHolder.invokeResult(msg);
-			});
+			},null);
 		} catch (InvalidArgumentException | SipException | ParseException e) {
 			logger.error("[命令发送失败] 布防/撤防操作: {}", e.getMessage());
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送: " + e.getMessage());
@@ -196,7 +192,7 @@ public class DeviceControl {
 				msg.setKey(key);
 				msg.setData(String.format("报警复位操作失败，错误码： %s, %s", event.statusCode, event.msg));
 				resultHolder.invokeResult(msg);
-			});
+			},null);
 		} catch (InvalidArgumentException | SipException | ParseException e) {
 			logger.error("[命令发送失败] 报警复位: {}", e.getMessage());
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
@@ -278,7 +274,7 @@ public class DeviceControl {
 				msg.setKey(key);
 				msg.setData(String.format("看守位控制操作失败，错误码： %s, %s", event.statusCode, event.msg));
 				resultHolder.invokeResult(msg);
-			});
+			},null);
 		} catch (InvalidArgumentException | SipException | ParseException e) {
 			logger.error("[命令发送失败] 看守位控制: {}", e.getMessage());
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());

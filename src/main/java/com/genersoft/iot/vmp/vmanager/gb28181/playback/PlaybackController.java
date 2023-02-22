@@ -1,6 +1,7 @@
 package com.genersoft.iot.vmp.vmanager.gb28181.playback;
 
 import com.genersoft.iot.vmp.common.StreamInfo;
+import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.conf.exception.ServiceException;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
@@ -10,6 +11,7 @@ import com.genersoft.iot.vmp.media.zlm.ZLMRTPServerFactory;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.service.IPlayService;
 import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
+import com.genersoft.iot.vmp.vmanager.bean.StreamContent;
 import com.genersoft.iot.vmp.vmanager.bean.WVPResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -32,6 +34,7 @@ import org.springframework.web.context.request.async.DeferredResult;
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
 import java.text.ParseException;
+import java.util.UUID;
 
 /**
  * @author lin
@@ -62,30 +65,46 @@ public class PlaybackController {
 	@Autowired
 	private DeferredResultHolder resultHolder;
 
+	@Autowired
+	private UserSetting userSetting;
+
 	@Operation(summary = "开始视频回放")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
 	@Parameter(name = "channelId", description = "通道国标编号", required = true)
 	@Parameter(name = "startTime", description = "开始时间", required = true)
 	@Parameter(name = "endTime", description = "结束时间", required = true)
 	@GetMapping("/start/{deviceId}/{channelId}")
-	public DeferredResult<WVPResult<StreamInfo>> play(@PathVariable String deviceId, @PathVariable String channelId,
-										  String startTime, String endTime) {
+	public DeferredResult<WVPResult<StreamContent>> start(@PathVariable String deviceId, @PathVariable String channelId,
+														 String startTime, String endTime) {
 
 		if (logger.isDebugEnabled()) {
 			logger.debug(String.format("设备回放 API调用，deviceId：%s ，channelId：%s", deviceId, channelId));
 		}
 
+		String uuid = UUID.randomUUID().toString();
+		String key = DeferredResultHolder.CALLBACK_CMD_PLAYBACK + deviceId + channelId;
+		DeferredResult<WVPResult<StreamContent>> result = new DeferredResult<>(userSetting.getPlayTimeout().longValue());
+		resultHolder.put(key, uuid, result);
 
-		return playService.playBack(deviceId, channelId, startTime, endTime, null,
+		WVPResult<StreamContent> wvpResult = new WVPResult<>();
+
+		RequestMessage msg = new RequestMessage();
+		msg.setKey(key);
+		msg.setId(uuid);
+
+		playService.playBack(deviceId, channelId, startTime, endTime, null,
 				playBackResult->{
-					if (playBackResult.getCode() != ErrorCode.SUCCESS.getCode()) {
-						RequestMessage data = playBackResult.getData();
-						data.setData(WVPResult.fail(playBackResult.getCode(), playBackResult.getMsg()));
-						resultHolder.invokeResult(data);
-					}else {
-						resultHolder.invokeResult(playBackResult.getData());
+					wvpResult.setCode(playBackResult.getCode());
+					wvpResult.setMsg(playBackResult.getMsg());
+					if (playBackResult.getCode() == ErrorCode.SUCCESS.getCode()) {
+						StreamInfo streamInfo = (StreamInfo)playBackResult.getData();
+						wvpResult.setData(new StreamContent(streamInfo));
 					}
+					msg.setData(wvpResult);
+					resultHolder.invokeResult(msg);
 				});
+
+		return result;
 	}
 
 

@@ -5,7 +5,6 @@ import com.genersoft.iot.vmp.conf.DynamicTask;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
-import com.genersoft.iot.vmp.gb28181.bean.SubscribeHolder;
 import com.genersoft.iot.vmp.gb28181.bean.SyncStatus;
 import com.genersoft.iot.vmp.gb28181.task.ISubscribeTask;
 import com.genersoft.iot.vmp.gb28181.task.impl.CatalogSubscribeTask;
@@ -25,7 +24,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.apache.commons.compress.utils.IOUtils;
-import org.apache.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,15 +31,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.ObjectUtils;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import javax.servlet.http.HttpServletResponse;
-import javax.sip.DialogState;
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.text.ParseException;
 import java.util.*;
@@ -101,7 +99,7 @@ public class DeviceQuery {
 	@GetMapping("/devices")
 	public PageInfo<Device> devices(int page, int count){
 		
-		return storager.queryVideoDeviceList(page, count);
+		return storager.queryVideoDeviceList(page, count,null);
 	}
 
 	/**
@@ -125,7 +123,7 @@ public class DeviceQuery {
 	@Parameter(name = "online", description = "是否在线")
 	@Parameter(name = "channelType", description = "设备/子目录-> false/true")
 	@Parameter(name = "catalogUnderDevice", description = "是否直属与设备的目录")
-	public PageInfo channels(@PathVariable String deviceId,
+	public PageInfo<DeviceChannel> channels(@PathVariable String deviceId,
 											   int page, int count,
 											   @RequestParam(required = false) String query,
 											   @RequestParam(required = false) Boolean online,
@@ -145,7 +143,7 @@ public class DeviceQuery {
 	 */
 	@Operation(summary = "同步设备通道")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
-	@PostMapping("/devices/{deviceId}/sync")
+	@GetMapping("/devices/{deviceId}/sync")
 	public WVPResult<SyncStatus> devicesSync(@PathVariable String deviceId){
 		
 		if (logger.isDebugEnabled()) {
@@ -225,7 +223,7 @@ public class DeviceQuery {
 	@Parameter(name = "online", description = "是否在线")
 	@Parameter(name = "channelType", description = "设备/子目录-> false/true")
 	@GetMapping("/sub_channels/{deviceId}/{channelId}/channels")
-	public PageInfo subChannels(@PathVariable String deviceId,
+	public PageInfo<DeviceChannel> subChannels(@PathVariable String deviceId,
 												  @PathVariable String channelId,
 												  int page,
 												  int count,
@@ -239,8 +237,7 @@ public class DeviceQuery {
 			return deviceChannelPageResult;
 		}
 
-		PageInfo pageResult = storager.querySubChannels(deviceId, channelId, query, channelType, online, page, count);
-		return pageResult;
+		return storager.querySubChannels(deviceId, channelId, query, channelType, online, page, count);
 	}
 
 	/**

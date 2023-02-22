@@ -1,9 +1,12 @@
 package com.genersoft.iot.vmp.gb28181.utils;
 
+import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
+import com.genersoft.iot.vmp.gb28181.bean.RemoteAddressInfo;
 import com.genersoft.iot.vmp.utils.GitUtil;
 import gov.nist.javax.sip.address.AddressImpl;
 import gov.nist.javax.sip.address.SipUri;
 import gov.nist.javax.sip.header.Subject;
+import gov.nist.javax.sip.message.SIPRequest;
 import org.springframework.util.ObjectUtils;
 
 import javax.sip.PeerUnavailableException;
@@ -119,4 +122,64 @@ public class SipUtils {
         return builder.toString();
     }
 
+    /**
+     * 从请求中获取设备ip地址和端口号
+     * @param request 请求
+     * @param sipUseSourceIpAsRemoteAddress  false 从via中获取地址， true 直接获取远程地址
+     * @return 地址信息
+     */
+    public static RemoteAddressInfo getRemoteAddressFromRequest(SIPRequest request, boolean sipUseSourceIpAsRemoteAddress) {
+
+        String remoteAddress;
+        int remotePort;
+        if (sipUseSourceIpAsRemoteAddress) {
+            remoteAddress = request.getRemoteAddress().getHostAddress();
+            remotePort = request.getRemotePort();
+        }else {
+            // 判断RPort是否改变，改变则说明路由nat信息变化，修改设备信息
+            // 获取到通信地址等信息
+            remoteAddress = request.getTopmostViaHeader().getReceived();
+            remotePort = request.getTopmostViaHeader().getRPort();
+            // 解析本地地址替代
+            if (ObjectUtils.isEmpty(remoteAddress) || remotePort == -1) {
+                remoteAddress = request.getTopmostViaHeader().getHost();
+                remotePort = request.getTopmostViaHeader().getPort();
+            }
+        }
+
+        return new RemoteAddressInfo(remoteAddress, remotePort);
+    }
+
+    public static DeviceChannel updateGps(DeviceChannel deviceChannel, String geoCoordSys) {
+        if (deviceChannel.getLongitude()*deviceChannel.getLatitude() > 0) {
+
+            if (geoCoordSys == null) {
+                geoCoordSys = "WGS84";
+            }
+            if ("WGS84".equals(geoCoordSys)) {
+                deviceChannel.setLongitudeWgs84(deviceChannel.getLongitude());
+                deviceChannel.setLatitudeWgs84(deviceChannel.getLatitude());
+                Double[] position = Coordtransform.WGS84ToGCJ02(deviceChannel.getLongitude(), deviceChannel.getLatitude());
+                deviceChannel.setLongitudeGcj02(position[0]);
+                deviceChannel.setLatitudeGcj02(position[1]);
+            }else if ("GCJ02".equals(geoCoordSys)) {
+                deviceChannel.setLongitudeGcj02(deviceChannel.getLongitude());
+                deviceChannel.setLatitudeGcj02(deviceChannel.getLatitude());
+                Double[] position = Coordtransform.GCJ02ToWGS84(deviceChannel.getLongitude(), deviceChannel.getLatitude());
+                deviceChannel.setLongitudeWgs84(position[0]);
+                deviceChannel.setLatitudeWgs84(position[1]);
+            }else {
+                deviceChannel.setLongitudeGcj02(0.00);
+                deviceChannel.setLatitudeGcj02(0.00);
+                deviceChannel.setLongitudeWgs84(0.00);
+                deviceChannel.setLatitudeWgs84(0.00);
+            }
+        }else {
+            deviceChannel.setLongitudeGcj02(deviceChannel.getLongitude());
+            deviceChannel.setLatitudeGcj02(deviceChannel.getLatitude());
+            deviceChannel.setLongitudeWgs84(deviceChannel.getLongitude());
+            deviceChannel.setLatitudeWgs84(deviceChannel.getLatitude());
+        }
+        return deviceChannel;
+    }
 }

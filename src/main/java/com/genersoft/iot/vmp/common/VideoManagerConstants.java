@@ -70,6 +70,8 @@ public class VideoManagerConstants {
 
 	public static final String SYSTEM_INFO_DISK_PREFIX = "VMP_SYSTEM_INFO_DISK_";
 
+	public static final String REGISTER_EXPIRE_TASK_KEY_PREFIX = "VMP_device_register_expire_";
+
 
 
 
@@ -135,5 +137,16 @@ public class VideoManagerConstants {
 
 	public static final String WVP_STREAM_GB_ID_PREFIX = "memberNo_";
 	public static final String WVP_STREAM_GPS_MSG_PREFIX = "WVP_STREAM_GPS_MSG_";
+
+	/**
+	 * Redis Const
+	 * 设备录像信息结果前缀
+	 */
+	public static final String REDIS_RECORD_INFO_RES_PRE = "GB_RECORD_INFO_RES_";
+	/**
+	 * Redis Const
+	 * 设备录像信息结果前缀
+	 */
+	public static final String REDIS_RECORD_INFO_RES_COUNT_PRE = "GB_RECORD_INFO_RES_COUNT:";
 
 }

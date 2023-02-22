@@ -2,7 +2,6 @@ package com.genersoft.iot.vmp.storager;
 
 import com.genersoft.iot.vmp.gb28181.bean.*;
 import com.genersoft.iot.vmp.media.zlm.dto.StreamProxyItem;
-import com.genersoft.iot.vmp.media.zlm.dto.StreamPushItem;
 import com.genersoft.iot.vmp.service.bean.GPSMsgInfo;
 import com.genersoft.iot.vmp.storager.dao.dto.ChannelSourceInfo;
 import com.genersoft.iot.vmp.vmanager.gb28181.platform.bean.ChannelReduce;
@@ -57,9 +56,9 @@ public interface IVideoManagerStorage {
 	 * @param count 每页数量
 	 * @return
 	 */
-	public PageInfo queryChannelsByDeviceId(String deviceId, String query, Boolean hasSubChannel, Boolean online, Boolean catalogUnderDevice, int page, int count);
+	public PageInfo<DeviceChannel> queryChannelsByDeviceId(String deviceId, String query, Boolean hasSubChannel, Boolean online, Boolean catalogUnderDevice, int page, int count);
 	
-	public List<DeviceChannel> queryChannelsByDeviceIdWithStartAndLimit(String deviceId, String query, Boolean hasSubChannel, Boolean online, int start, int limit);
+	public List<DeviceChannel> queryChannelsByDeviceIdWithStartAndLimit(String deviceId, String query, Boolean hasSubChannel, Boolean online, int start, int limit,List<String> channelIds);
 
 
 	/**
@@ -68,7 +67,7 @@ public interface IVideoManagerStorage {
 	 * @param deviceId 设备ID
 	 * @return
 	 */
-	public List<DeviceChannel> queryChannelsByDeviceId(String deviceId);
+	public List<DeviceChannel> queryChannelsByDeviceId(String deviceId,Boolean online,List<String> channelIds);
 	public List<DeviceChannel> queryOnlineChannelsByDeviceId(String deviceId);
 
 	/**
@@ -91,14 +90,14 @@ public interface IVideoManagerStorage {
 	 * @param count 每页数量
 	 * @return List<Device> 设备对象数组
 	 */
-	public PageInfo<Device> queryVideoDeviceList(int page, int count);
+	public PageInfo<Device> queryVideoDeviceList(int page, int count,Boolean online);
 
 	/**
 	 * 获取多个设备
 	 *
 	 * @return List<Device> 设备对象数组
 	 */
-	public List<Device> queryVideoDeviceList();
+	public List<Device> queryVideoDeviceList(Boolean online);
 
 
 
@@ -186,7 +185,13 @@ public interface IVideoManagerStorage {
 
     Device queryVideoDeviceByPlatformIdAndChannelId(String platformId, String channelId);
 
-
+	/**
+	 * 针对deviceinfo指令的查询接口
+	 * @param platformId 平台id
+	 * @param channelId 通道id
+	 * @return 设备信息
+	 */
+	Device queryDeviceInfoByPlatformIdAndChannelId(String platformId, String channelId);
 	/**
 	 * 添加Mobile Position设备移动位置
 	 * @param mobilePosition
@@ -323,6 +328,8 @@ public interface IVideoManagerStorage {
 	 * @param deviceChannelList
 	 */
 	boolean resetChannels(String deviceId, List<DeviceChannel> deviceChannelList);
+
+	boolean updateChannels(String deviceId, List<DeviceChannel> deviceChannelList);
 
 	/**
 	 * 获取目录信息

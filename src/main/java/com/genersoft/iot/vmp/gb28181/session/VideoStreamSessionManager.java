@@ -1,17 +1,18 @@
 package com.genersoft.iot.vmp.gb28181.session;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import com.genersoft.iot.vmp.common.VideoManagerConstants;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.gb28181.bean.SipTransactionInfo;
 import com.genersoft.iot.vmp.gb28181.bean.SsrcTransaction;
+import com.genersoft.iot.vmp.utils.JsonUtil;
 import com.genersoft.iot.vmp.utils.redis.RedisUtil;
 import gov.nist.javax.sip.message.SIPResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ObjectUtils;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**    
  * @description:视频流session管理器，管理视频预览、预览回放的通信句柄 
@@ -51,8 +52,6 @@ public class VideoStreamSessionManager {
 		ssrcTransaction.setMediaServerId(mediaServerId);
 		ssrcTransaction.setType(type);
 
-		RedisUtil.set(VideoManagerConstants.MEDIA_TRANSACTION_USED_PREFIX + userSetting.getServerId()
-				+ "_" +  deviceId + "_" + channelId + "_" + callId + "_" + stream, ssrcTransaction);
 		RedisUtil.set(VideoManagerConstants.MEDIA_TRANSACTION_USED_PREFIX + userSetting.getServerId()
 				+ "_" +  deviceId + "_" + channelId + "_" + callId + "_" + stream, ssrcTransaction);
 	}
@@ -135,7 +134,7 @@ public class VideoStreamSessionManager {
 		List<SsrcTransaction> result= new ArrayList<>();
 		for (int i = 0; i < ssrcTransactionKeys.size(); i++) {
 			String key = (String)ssrcTransactionKeys.get(i);
-			SsrcTransaction ssrcTransaction = (SsrcTransaction)RedisUtil.get(key);
+			SsrcTransaction ssrcTransaction = JsonUtil.redisJsonToObject(key, SsrcTransaction.class);
 			result.add(ssrcTransaction);
 		}
 		return result;

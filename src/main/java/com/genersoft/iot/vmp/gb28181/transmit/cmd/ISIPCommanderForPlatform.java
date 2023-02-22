@@ -51,11 +51,11 @@ public interface ISIPCommanderForPlatform {
     /**
      * 向上级回复DeviceInfo查询信息
      * @param parentPlatform 平台信息
-     * @param sn
-     * @param fromTag
+     * @param sn SN
+     * @param fromTag FROM头的tag信息
      * @return
      */
-    void deviceInfoResponse(ParentPlatform parentPlatform, String sn, String fromTag) throws SipException, InvalidArgumentException, ParseException;
+    void deviceInfoResponse(ParentPlatform parentPlatform,Device device, String sn, String fromTag) throws SipException, InvalidArgumentException, ParseException;
 
     /**
      * 向上级回复DeviceStatus查询信息
@@ -64,7 +64,7 @@ public interface ISIPCommanderForPlatform {
      * @param fromTag
      * @return
      */
-    void deviceStatusResponse(ParentPlatform parentPlatform, String sn, String fromTag) throws SipException, InvalidArgumentException, ParseException;
+    void deviceStatusResponse(ParentPlatform parentPlatform,String channelId, String sn, String fromTag,int status) throws SipException, InvalidArgumentException, ParseException;
 
     /**
      * 向上级回复移动位置订阅消息

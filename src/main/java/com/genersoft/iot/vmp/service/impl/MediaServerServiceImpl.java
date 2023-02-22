@@ -22,6 +22,7 @@ import com.genersoft.iot.vmp.service.bean.SSRCInfo;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.storager.dao.MediaServerMapper;
 import com.genersoft.iot.vmp.utils.DateUtil;
+import com.genersoft.iot.vmp.utils.JsonUtil;
 import com.genersoft.iot.vmp.utils.redis.RedisUtil;
 import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
 import okhttp3.OkHttpClient;
@@ -169,7 +170,6 @@ public class MediaServerServiceImpl implements IMediaServerService {
             return;
         }
         zlmrtpServerFactory.closeRtpServer(mediaServerItem, streamId);
-        releaseSsrc(mediaServerItem.getId(), streamId);
     }
 
     @Override
@@ -229,7 +229,10 @@ public class MediaServerServiceImpl implements IMediaServerService {
         String onlineKey = VideoManagerConstants.MEDIA_SERVERS_ONLINE_PREFIX + userSetting.getServerId();
         for (Object mediaServerKey : mediaServerKeys) {
             String key = (String) mediaServerKey;
-            MediaServerItem mediaServerItem = (MediaServerItem) RedisUtil.get(key);
+            MediaServerItem mediaServerItem = JsonUtil.redisJsonToObject(key, MediaServerItem.class);
+            if (Objects.isNull(mediaServerItem)) {
+                continue;
+            }
             // 检查状态
             Double aDouble = RedisUtil.zScore(onlineKey, mediaServerItem.getId());
             if (aDouble != null) {
@@ -281,7 +284,7 @@ public class MediaServerServiceImpl implements IMediaServerService {
             return null;
         }
         String key = VideoManagerConstants.MEDIA_SERVER_PREFIX + userSetting.getServerId() + "_" + mediaServerId;
-        return (MediaServerItem)RedisUtil.get(key);
+        return JsonUtil.redisJsonToObject(key, MediaServerItem.class);
     }
 
     @Override
@@ -397,8 +400,10 @@ public class MediaServerServiceImpl implements IMediaServerService {
             SsrcConfig ssrcConfig = new SsrcConfig(zlmServerConfig.getGeneralMediaServerId(), null, sipConfig.getDomain());
             serverItem.setSsrcConfig(ssrcConfig);
         }else {
-            MediaServerItem mediaServerItemInRedis = (MediaServerItem)RedisUtil.get(key);
-            serverItem.setSsrcConfig(mediaServerItemInRedis.getSsrcConfig());
+            MediaServerItem mediaServerItemInRedis = JsonUtil.redisJsonToObject(key, MediaServerItem.class);
+            if (Objects.nonNull(mediaServerItemInRedis)) {
+                serverItem.setSsrcConfig(mediaServerItemInRedis.getSsrcConfig());
+            }
         }
         RedisUtil.set(key, serverItem);
         resetOnlineServerItem(serverItem);
@@ -488,7 +493,7 @@ public class MediaServerServiceImpl implements IMediaServerService {
      * @return MediaServerItem
      */
     @Override
-    public MediaServerItem getMediaServerForMinimumLoad() {
+    public MediaServerItem getMediaServerForMinimumLoad(Boolean hasAssist) {
         String key = VideoManagerConstants.MEDIA_SERVERS_ONLINE_PREFIX + userSetting.getServerId();
 
         if (RedisUtil.zSize(key)  == null || RedisUtil.zSize(key) == 0) {
@@ -501,9 +506,31 @@ public class MediaServerServiceImpl implements IMediaServerService {
         // 获取分数最低的，及并发最低的
         Set<Object> objects = RedisUtil.zRange(key, 0, -1);
         ArrayList<Object> mediaServerObjectS = new ArrayList<>(objects);
+        MediaServerItem mediaServerItem = null;
+        if (hasAssist == null) {
+            String mediaServerId = (String)mediaServerObjectS.get(0);
+            mediaServerItem = getOne(mediaServerId);
+        }else if (hasAssist) {
+            for (Object mediaServerObject : mediaServerObjectS) {
+                String mediaServerId = (String)mediaServerObject;
+                MediaServerItem serverItem = getOne(mediaServerId);
+                if (serverItem.getRecordAssistPort() > 0) {
+                    mediaServerItem = serverItem;
+                    break;
+                }
+            }
+        }else if (!hasAssist) {
+            for (Object mediaServerObject : mediaServerObjectS) {
+                String mediaServerId = (String)mediaServerObject;
+                MediaServerItem serverItem = getOne(mediaServerId);
+                if (serverItem.getRecordAssistPort() == 0) {
+                    mediaServerItem = serverItem;
+                    break;
+                }
+            }
+        }
 
-        String mediaServerId = (String)mediaServerObjectS.get(0);
-        return getOne(mediaServerId);
+        return mediaServerItem;
     }
 
     /**

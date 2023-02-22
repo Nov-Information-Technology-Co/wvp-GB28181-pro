@@ -1,13 +1,17 @@
 package com.genersoft.iot.vmp.gb28181.transmit.event.request.impl;
 
+import com.genersoft.iot.vmp.conf.ServiceInfo;
 import com.genersoft.iot.vmp.conf.SipConfig;
+import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.gb28181.auth.DigestServerAuthenticationHelper;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
+import com.genersoft.iot.vmp.gb28181.bean.RemoteAddressInfo;
 import com.genersoft.iot.vmp.gb28181.bean.WvpSipDate;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPProcessorObserver;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPSender;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.ISIPRequestProcessor;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.SIPRequestProcessorParent;
+import com.genersoft.iot.vmp.gb28181.utils.SipUtils;
 import com.genersoft.iot.vmp.service.IDeviceService;
 import com.genersoft.iot.vmp.utils.DateUtil;
 import gov.nist.javax.sip.RequestEventExt;
@@ -56,6 +60,9 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
     @Autowired
     private SIPSender sipSender;
 
+    @Autowired
+    private UserSetting userSetting;
+
     @Override
     public void afterPropertiesSet() throws Exception {
         // 添加消息处理的订阅
@@ -73,6 +80,19 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
             RequestEventExt evtExt = (RequestEventExt) evt;
             String requestAddress = evtExt.getRemoteIpAddress() + ":" + evtExt.getRemotePort();
             logger.info("[注册请求] 开始处理: {}", requestAddress);
+//            MBeanServer beanServer = ManagementFactory.getPlatformMBeanServer();
+//            QueryExp protocol = Query.match(Query.attr("protocol"), Query.value("HTTP/1.1"));
+////            ObjectName name = new ObjectName("*:type=Connector,*");
+//            ObjectName name = new ObjectName("*:*");
+//            Set<ObjectName> objectNames = beanServer.queryNames(name, protocol);
+//            for (ObjectName objectName : objectNames) {
+//                String catalina = objectName.getDomain();
+//                if ("Catalina".equals(catalina)) {
+//                    System.out.println(objectName.getKeyProperty("port"));
+//                }
+//            }
+
+            System.out.println(ServiceInfo.getServerPort());
             SIPRequest request = (SIPRequest)evt.getRequest();
             Response response = null;
             boolean passwordCorrect = false;
@@ -125,15 +145,9 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
             // 添加Expires头
             response.addHeader(request.getExpires());
 
-            // 获取到通信地址等信息
-            ViaHeader viaHeader = (ViaHeader) request.getHeader(ViaHeader.NAME);
-            String received = viaHeader.getReceived();
-            int rPort = viaHeader.getRPort();
-            // 解析本地地址替代
-            if (ObjectUtils.isEmpty(received) || rPort == -1) {
-                received = viaHeader.getHost();
-                rPort = viaHeader.getPort();
-            }
+            RemoteAddressInfo remoteAddressInfo = SipUtils.getRemoteAddressFromRequest(request,
+                    userSetting.getSipUseSourceIpAsRemoteAddress());
+
             if (device == null) {
                 device = new Device();
                 device.setStreamMode("UDP");
@@ -143,9 +157,9 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
                 device.setDeviceId(deviceId);
                 device.setOnline(0);
             }
-            device.setIp(received);
-            device.setPort(rPort);
-            device.setHostAddress(received.concat(":").concat(String.valueOf(rPort)));
+            device.setIp(remoteAddressInfo.getIp());
+            device.setPort(remoteAddressInfo.getPort());
+            device.setHostAddress(remoteAddressInfo.getIp().concat(":").concat(String.valueOf(remoteAddressInfo.getPort())));
             device.setLocalIp(request.getLocalAddress().getHostAddress());
             if (request.getExpires().getExpires() == 0) {
                 // 注销成功

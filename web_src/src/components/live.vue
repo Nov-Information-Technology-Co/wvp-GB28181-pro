@@ -135,14 +135,14 @@ export default {
       this.loading = true
       this.$axios({
         method: 'get',
-        url: '/api/play/start/' + deviceId + '/' + channelId
+        url: './api/play/start/' + deviceId + '/' + channelId
       }).then(function (res) {
         if (res.data.code === 0 && res.data.data) {
           let videoUrl;
           if (location.protocol === "https:") {
-            videoUrl = res.data.data.wss_flv.url;
+            videoUrl = res.data.data.wss_flv;
           } else {
-            videoUrl = res.data.data.ws_flv.url;
+            videoUrl = res.data.data.ws_flv;
           }
           itemData.playUrl = videoUrl;
           that.setPlayUrl(videoUrl, idxTmp);
