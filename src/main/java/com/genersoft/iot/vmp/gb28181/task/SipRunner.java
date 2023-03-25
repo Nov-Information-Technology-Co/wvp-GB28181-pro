@@ -28,7 +28,7 @@ import java.util.Map;
  * @author lin
  */
 @Component
-@Order(value=4)
+@Order(value=14)
 public class SipRunner implements CommandLineRunner {
 
     @Autowired
@@ -61,7 +61,7 @@ public class SipRunner implements CommandLineRunner {
 
         for (Device device : deviceList) {
             if (deviceService.expire(device)){
-                deviceService.offline(device.getDeviceId());
+                deviceService.offline(device.getDeviceId(), "注册已过期");
             }else {
                 deviceService.online(device);
             }

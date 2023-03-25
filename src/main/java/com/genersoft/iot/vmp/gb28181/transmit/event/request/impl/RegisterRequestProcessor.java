@@ -1,6 +1,5 @@
 package com.genersoft.iot.vmp.gb28181.transmit.event.request.impl;
 
-import com.genersoft.iot.vmp.conf.ServiceInfo;
 import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.gb28181.auth.DigestServerAuthenticationHelper;
@@ -92,7 +91,7 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
 //                }
 //            }
 
-            System.out.println(ServiceInfo.getServerPort());
+//            System.out.println(ServiceInfo.getServerPort());
             SIPRequest request = (SIPRequest)evt.getRequest();
             Response response = null;
             boolean passwordCorrect = false;
@@ -183,10 +182,10 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
                 deviceService.online(device);
             } else {
                 logger.info("[注销成功] deviceId: {}->{}" ,deviceId, requestAddress);
-                deviceService.offline(deviceId);
+                deviceService.offline(deviceId, "主动注销");
             }
         } catch (SipException | NoSuchAlgorithmException | ParseException e) {
-            e.printStackTrace();
+            logger.error("未处理的异常 ", e);
         }
     }
 }

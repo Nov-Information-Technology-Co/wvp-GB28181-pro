@@ -38,6 +38,7 @@ import javax.sip.header.FromHeader;
 import javax.sip.message.Response;
 import java.text.ParseException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -92,7 +93,7 @@ public class NotifyRequestProcessor extends SIPRequestProcessorParent implements
 		try {
 			responseAck((SIPRequest) evt.getRequest(), Response.OK, null, null);
 		}catch (SipException | InvalidArgumentException | ParseException e) {
-			e.printStackTrace();
+			logger.error("未处理的异常 ", e);
 		}
 		boolean runed = !taskQueue.isEmpty();
 		taskQueue.offer(new HandlerCatchData(evt, null, null));
@@ -150,6 +151,17 @@ public class NotifyRequestProcessor extends SIPRequestProcessorParent implements
 			Element deviceIdElement = rootElement.element("DeviceID");
 			String channelId = deviceIdElement.getTextTrim().toString();
 			Device device = redisCatchStorage.getDevice(deviceId);
+
+			if (device == null) {
+				// 根据通道id查询设备Id
+				List<Device> deviceList = deviceChannelService.getDeviceByChannelId(channelId);
+				if (deviceList.size() > 0) {
+					device = deviceList.get(0);
+				}else {
+					logger.warn("[mobilePosition移动位置Notify] 未找到通道{}所属的设备", channelId);
+					return;
+				}
+			}
 			if (device != null) {
 				if (!ObjectUtils.isEmpty(device.getName())) {
 					mobilePosition.setDeviceName(device.getName());
@@ -213,7 +225,7 @@ public class NotifyRequestProcessor extends SIPRequestProcessorParent implements
 			jsonObject.put("speed", mobilePosition.getSpeed());
 			redisCatchStorage.sendMobilePositionMsg(jsonObject);
 		} catch (DocumentException  e) {
-			e.printStackTrace();
+			logger.error("未处理的异常 ", e);
 		}
 	}
 
@@ -323,7 +335,7 @@ public class NotifyRequestProcessor extends SIPRequestProcessorParent implements
 				publisher.deviceAlarmEventPublish(deviceAlarm);
 			}
 		} catch (DocumentException e) {
-			e.printStackTrace();
+			logger.error("未处理的异常 ", e);
 		}
 	}
 
@@ -381,12 +393,20 @@ public class NotifyRequestProcessor extends SIPRequestProcessorParent implements
 						case CatalogEvent.OFF :
 							// 离线
 							logger.info("[收到通道离线通知] 来自设备: {}, 通道 {}", device.getDeviceId(), channel.getChannelId());
-							storager.deviceChannelOffline(deviceId, channel.getChannelId());
+							if (userSetting.getRefuseChannelStatusChannelFormNotify()) {
+								storager.deviceChannelOffline(deviceId, channel.getChannelId());
+							}else {
+								logger.info("[收到通道离线通知] 但是平台已配置拒绝此消息，来自设备: {}, 通道 {}", device.getDeviceId(), channel.getChannelId());
+							}
 							break;
 						case CatalogEvent.VLOST:
 							// 视频丢失
 							logger.info("[收到通道视频丢失通知] 来自设备: {}, 通道 {}", device.getDeviceId(), channel.getChannelId());
-							storager.deviceChannelOffline(deviceId, channel.getChannelId());
+							if (userSetting.getRefuseChannelStatusChannelFormNotify()) {
+								storager.deviceChannelOffline(deviceId, channel.getChannelId());
+							}else {
+								logger.info("[收到通道视频丢失通知] 但是平台已配置拒绝此消息，来自设备: {}, 通道 {}", device.getDeviceId(), channel.getChannelId());
+							}
 							break;
 						case CatalogEvent.DEFECT:
 							// 故障
@@ -416,7 +436,7 @@ public class NotifyRequestProcessor extends SIPRequestProcessorParent implements
 				}
 			}
 		} catch (DocumentException e) {
-			e.printStackTrace();
+			logger.error("未处理的异常 ", e);
 		}
 	}
 

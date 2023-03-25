@@ -5,6 +5,7 @@ import com.genersoft.iot.vmp.service.IMediaServerService;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
+import org.junit.jupiter.api.Order;
 import org.mitre.dsmiley.httpproxy.ProxyServlet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ import java.net.ConnectException;
  */
 @SuppressWarnings(value = {"rawtypes", "unchecked"})
 @Configuration
+@Order(1)
 public class ProxyServletConfig {
 
     private final static Logger logger = LoggerFactory.getLogger(ProxyServletConfig.class);
@@ -167,13 +169,11 @@ public class ProxyServletConfig {
         protected String rewriteQueryStringFromRequest(HttpServletRequest servletRequest, String queryString) {
             String queryStr = super.rewriteQueryStringFromRequest(servletRequest, queryString);
             MediaServerItem mediaInfo = getMediaInfoByUri(servletRequest.getRequestURI());
-            String remoteHost = String.format("http://%s:%s", mediaInfo.getIp(), mediaInfo.getHttpPort());
-            if (mediaInfo != null) {
-                if (!ObjectUtils.isEmpty(queryStr)) {
-                    queryStr += "&remoteHost=" + remoteHost;
-                }else {
-                    queryStr = "remoteHost=" + remoteHost;
-                }
+            String remoteHost = String.format("http://%s:%s", mediaInfo.getStreamIp(), mediaInfo.getHttpPort());
+            if (!ObjectUtils.isEmpty(queryStr)) {
+                queryStr += "&remoteHost=" + remoteHost;
+            }else {
+                queryStr = "remoteHost=" + remoteHost;
             }
             return queryStr;
         }
