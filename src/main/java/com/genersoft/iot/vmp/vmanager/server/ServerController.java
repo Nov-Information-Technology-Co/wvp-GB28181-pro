@@ -8,6 +8,7 @@ import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.VersionInfo;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
+import com.genersoft.iot.vmp.media.zlm.SendRtpPortManager;
 import com.genersoft.iot.vmp.media.zlm.ZlmHttpHookSubscribe;
 import com.genersoft.iot.vmp.media.zlm.dto.IHookSubscribe;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
@@ -15,7 +16,7 @@ import com.genersoft.iot.vmp.service.*;
 import com.genersoft.iot.vmp.service.bean.MediaServerLoad;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
-import com.genersoft.iot.vmp.vmanager.bean.ResourceBaceInfo;
+import com.genersoft.iot.vmp.vmanager.bean.ResourceBaseInfo;
 import com.genersoft.iot.vmp.vmanager.bean.ResourceInfo;
 import com.genersoft.iot.vmp.vmanager.bean.SystemConfigInfo;
 import io.swagger.v3.oas.annotations.Operation;
@@ -71,6 +72,9 @@ public class ServerController {
 
     @Autowired
     private IRedisCatchStorage redisCatchStorage;
+
+    @Autowired
+    private SendRtpPortManager sendRtpPortManager;
 
 
     @GetMapping(value = "/media_server/list")
@@ -251,13 +255,13 @@ public class ServerController {
     @Operation(summary = "获取负载信息")
     public ResourceInfo getResourceInfo() {
         ResourceInfo result = new ResourceInfo();
-        ResourceBaceInfo deviceInfo = deviceService.getOverview();
+        ResourceBaseInfo deviceInfo = deviceService.getOverview();
         result.setDevice(deviceInfo);
-        ResourceBaceInfo channelInfo = channelService.getOverview();
+        ResourceBaseInfo channelInfo = channelService.getOverview();
         result.setChannel(channelInfo);
-        ResourceBaceInfo pushInfo = pushService.getOverview();
+        ResourceBaseInfo pushInfo = pushService.getOverview();
         result.setPush(pushInfo);
-        ResourceBaceInfo proxyInfo = proxyService.getOverview();
+        ResourceBaseInfo proxyInfo = proxyService.getOverview();
         result.setProxy(proxyInfo);
 
         return result;

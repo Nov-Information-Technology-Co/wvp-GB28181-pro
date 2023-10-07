@@ -26,6 +26,12 @@
             <el-option label="在线" value="true"></el-option>
             <el-option label="离线" value="false"></el-option>
           </el-select>
+          清晰度:
+          <el-select size="mini" style="margin-right: 1rem;" @change="search" v-model="isSubStream" placeholder="请选择"
+                     default-first-option>
+            <el-option label="原画" :value="false"></el-option>
+            <el-option label="流畅" :value="true"></el-option>
+          </el-select>
         </div>
       <el-button icon="el-icon-refresh-right" circle size="mini" @click="refresh()"></el-button>
       <el-button v-if="showTree" icon="iconfont icon-list" circle size="mini" @click="switchList()"></el-button>
@@ -79,8 +85,8 @@
         <el-table-column label="状态" min-width="120">
           <template slot-scope="scope">
             <div slot="reference" class="name-wrapper">
-              <el-tag size="medium" v-if="scope.row.status === 1">在线</el-tag>
-              <el-tag size="medium" type="info" v-if="scope.row.status === 0">离线</el-tag>
+              <el-tag size="medium" v-if="scope.row.status === true">在线</el-tag>
+              <el-tag size="medium" type="info" v-if="scope.row.status === false">离线</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -98,6 +104,9 @@
             </el-button>
             <el-divider v-if="scope.row.subCount > 0 || scope.row.parental === 1" direction="vertical"></el-divider>
             <el-button size="medium" v-bind:disabled="device == null || device.online === 0" icon="el-icon-video-camera" type="text" @click="queryRecords(scope.row)">设备录像
+            </el-button>
+            <el-button size="medium" v-bind:disabled="device == null || device.online === 0" icon="el-icon-cloudy"
+                       type="text" @click="queryCloudRecords(scope.row)">云端录像
             </el-button>
           </template>
         </el-table-column>
@@ -123,7 +132,6 @@
 <script>
 import devicePlayer from './dialog/devicePlayer.vue'
 import uiHeader from '../layout/UiHeader.vue'
-import moment from "moment";
 import DeviceService from "./service/DeviceService";
 import DeviceTree from "./common/DeviceTree";
 
@@ -147,6 +155,7 @@ export default {
       searchSrt: "",
       channelType: "",
       online: "",
+      isSubStream: false,
       winHeight: window.innerHeight - 200,
       currentPage: 1,
       count: 15,
@@ -238,7 +247,10 @@ export default {
       let that = this;
       this.$axios({
         method: 'get',
-        url: '/api/play/start/' + deviceId + '/' + channelId
+        url: '/api/play/start/' + deviceId + '/' + channelId,
+        params:{
+          isSubStream: this.isSubStream
+        }
       }).then(function (res) {
         console.log(res)
         that.isLoging = false;
@@ -274,11 +286,20 @@ export default {
 
       this.$router.push(`/gbRecordDetail/${deviceId}/${channelId}`)
     },
+    queryCloudRecords: function (itemData) {
+      let deviceId = this.deviceId;
+      let channelId = itemData.channelId;
+
+      this.$router.push(`/cloudRecordDetail/rtp/${deviceId}_${channelId}`)
+    },
     stopDevicePush: function (itemData) {
       var that = this;
       this.$axios({
         method: 'get',
-        url: '/api/play/stop/' + this.deviceId + "/" + itemData.channelId
+        url: '/api/play/stop/' + this.deviceId + "/" + itemData.channelId,
+        params:{
+          isSubStream: this.isSubStream
+        }
       }).then(function (res) {
         that.initData();
       }).catch(function (error) {
@@ -290,8 +311,8 @@ export default {
       });
     },
     getSnap: function (row) {
-      let url = (process.env.NODE_ENV === 'development'? "debug": "") + '/api/device/query/snap/' + row.deviceId + '/' + row.channelId
-      return url
+      let baseUrl = window.baseUrl ? window.baseUrl : "";
+      return ((process.env.NODE_ENV === 'development') ? process.env.BASE_API : baseUrl) + '/api/device/query/snap/' + row.deviceId + '/' + row.channelId;
     },
     getBigSnap: function (row) {
       return [this.getSnap(row)]

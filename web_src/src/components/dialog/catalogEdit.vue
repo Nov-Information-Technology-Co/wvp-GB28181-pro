@@ -12,15 +12,6 @@
     >
       <div id="shared" style="margin-top: 1rem;margin-right: 100px;">
         <el-form ref="form" :rules="rules" :model="form" label-width="140px" >
-<!--          <el-form-item >-->
-<!--            建议的类型：-->
-<!--            <br/>-->
-<!--            &emsp;&emsp;行政区划（可选2位/4位/6位/8位/10位数字，例如：130432，表示河北省邯郸市广平县）-->
-<!--            <br/>-->
-<!--            &emsp;&emsp;业务分组（第11、12、13位215，例如：34020000002150000001）-->
-<!--            <br/>-->
-<!--            &emsp;&emsp;虚拟组织（第11、12、13位216，例如：34020000002160000001）-->
-<!--          </el-form-item>-->
           <el-form-item label="节点编号" prop="id" >
             <el-input v-model="form.id" :disabled="isEdit" clearable></el-input>
           </el-form-item>
@@ -46,12 +37,11 @@
 export default {
   name: "catalogEdit",
   computed: {},
-  props: ['platformId'],
+  props: ['platformId', 'platformDeviceId'],
   created() {},
   data() {
     let checkId = (rule, value, callback) => {
       console.log("checkId")
-      console.log(this.treeType)
       console.log(rule)
       console.log(value)
       console.log(value.length)
@@ -59,21 +49,38 @@ export default {
       if (!value) {
         return callback(new Error('编号不能为空'));
       }
-      if (this.treeType === "BusinessGroup" && value.length !== 20) {
-        return callback(new Error('编号必须由20位数字组成'));
-      }
-      if (this.treeType === "CivilCode" && value.length <= 8 && value.length%2 !== 0) {
-        return callback(new Error('行政区划必须是八位以下的偶数个数字组成'));
-      }
-      if (this.treeType === "BusinessGroup") {
+      if (value.trim().length <= 8) {
+        if (value.trim().length%2 !== 0) {
+          return callback(new Error('行政区划编号必须为2/4/6/8位'));
+        }
+        if (this.form.parentId !== this.platformDeviceId && this.form.parentId.length >= value.trim().length) {
+          if (this.form.parentId.length === 20) {
+            return callback(new Error('业务分组/虚拟组织下不可创建行政区划'));
+          }else {
+            return callback(new Error('行政区划编号长度应该每次两位递增'));
+          }
+        }
+      }else {
+        if (value.trim().length !== 20) {
+          return callback(new Error('编号必须为2/4/6/8位的行政区划或20位的虚拟组织/业务分组'));
+        }
         let catalogType = value.substring(10, 13);
         console.log(catalogType)
-        // 216 为虚拟组织 215 为业务分组；目录第一级必须为业务分组， 业务分组下为虚拟组织，虚拟组织下可以有其他虚拟组织
-        if (this.level === 1 && catalogType !== "215") {
-          return callback(new Error('业务分组模式下第一层目录的编号11到13位必须为215'));
+        if (catalogType !== "215" && catalogType !== "216") {
+          return callback(new Error('编号错误，业务分组11-13位为215，虚拟组织11-13位为216'));
         }
-        if (this.level > 1 && catalogType !== "216") {
-          return callback(new Error('业务分组模式下第一层以下目录的编号11到13位必须为216'));
+        if (catalogType === "216") {
+
+          if (this.form.parentId !== this.platformDeviceId){
+            if (this.form.parentId.length <= 8) {
+              return callback(new Error('编号错误，建立虚拟组织前必须先建立业务分组（11-13位为215）'));
+            }
+          }
+        }
+        if (catalogType === "215") {
+          if (this.form.parentId.length === "215") {
+            return callback(new Error('编号错误，业务分组下只能建立虚拟组织（11-13位为216）'));
+          }
         }
       }
       callback();
@@ -83,7 +90,6 @@ export default {
       showDialog: false,
       isLoging: false,
       isEdit: false,
-      treeType: null,
       level: 0,
       form: {
         id: null,
@@ -98,7 +104,7 @@ export default {
     };
   },
   methods: {
-    openDialog: function (isEdit, id, name, parentId, treeType, level, callback) {
+    openDialog: function (isEdit, id, name, parentId, level, callback) {
       console.log("parentId: " + parentId)
       console.log(this.form)
       this.isEdit = isEdit;
@@ -108,31 +114,34 @@ export default {
       this.form.parentId = parentId;
       this.showDialog = true;
       this.submitCallback = callback;
-      this.treeType = treeType;
       this.level = level;
     },
     onSubmit: function () {
-      console.log("onSubmit");
-      console.log(this.form);
-      this.$axios({
-        method:"post",
-        url:`/api/platform/catalog/${!this.isEdit? "add":"edit"}`,
-        data: this.form
-      }).then((res)=> {
-          if (res.data.code === 0) {
-            if (this.submitCallback)this.submitCallback(this.form)
-          }else {
-            this.$message({
-              showClose: true,
-              message: res.data.msg,
-              type: "error",
+      this.$refs["form"].validate((valid) => {
+        if (valid) {
+          this.$axios({
+            method:"post",
+            url:`/api/platform/catalog/${!this.isEdit? "add":"edit"}`,
+            data: this.form
+          }).then((res)=> {
+            if (res.data.code === 0) {
+              if (this.submitCallback)this.submitCallback(this.form)
+            }else {
+              this.$message({
+                showClose: true,
+                message: res.data.msg,
+                type: "error",
+              });
+            }
+            this.close();
+          })
+            .catch((error)=> {
+              console.log(error);
             });
-          }
-          this.close();
-        })
-        .catch((error)=> {
-          console.log(error);
-        });
+        } else {
+          return false;
+        }
+      });
     },
     close: function () {
       this.isEdit = false;

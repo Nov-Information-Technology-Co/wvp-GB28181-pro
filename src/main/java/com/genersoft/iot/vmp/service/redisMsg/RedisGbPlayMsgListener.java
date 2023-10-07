@@ -2,18 +2,17 @@ package com.genersoft.iot.vmp.service.redisMsg;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.genersoft.iot.vmp.common.VideoManagerConstants;
 import com.genersoft.iot.vmp.conf.DynamicTask;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.gb28181.bean.SendRtpItem;
+import com.genersoft.iot.vmp.media.zlm.ZLMServerFactory;
 import com.genersoft.iot.vmp.media.zlm.ZlmHttpHookSubscribe;
-import com.genersoft.iot.vmp.media.zlm.ZLMMediaListManager;
-import com.genersoft.iot.vmp.media.zlm.ZLMRTPServerFactory;
 import com.genersoft.iot.vmp.media.zlm.dto.HookSubscribeFactory;
 import com.genersoft.iot.vmp.media.zlm.dto.HookSubscribeForStreamChange;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.service.IMediaServerService;
 import com.genersoft.iot.vmp.service.bean.*;
-import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.utils.redis.RedisUtil;
 import com.genersoft.iot.vmp.vmanager.bean.WVPResult;
 import org.slf4j.Logger;
@@ -22,11 +21,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.text.ParseException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,22 +69,18 @@ public class RedisGbPlayMsgListener implements MessageListener {
 
 
     @Autowired
-    private ZLMMediaListManager zlmMediaListManager;
+    private RedisTemplate<Object, Object> redisTemplate;
 
     @Autowired
-    private ZLMRTPServerFactory zlmrtpServerFactory;
+    private ZLMServerFactory zlmServerFactory;
 
     @Autowired
     private IMediaServerService mediaServerService;
 
-    @Autowired
-    private IRedisCatchStorage redisCatchStorage;
 
     @Autowired
     private DynamicTask dynamicTask;
 
-    @Autowired
-    private ZLMMediaListManager mediaListManager;
 
     @Autowired
     private ZlmHttpHookSubscribe subscribe;
@@ -132,6 +129,7 @@ public class RedisGbPlayMsgListener implements MessageListener {
                                 case WvpRedisMsgCmd.REQUEST_PUSH_STREAM:
                                     RequestPushStreamMsg param = JSON.to(RequestPushStreamMsg.class, wvpRedisMsg.getContent());
                                     requestPushStreamMsgHand(param, wvpRedisMsg.getFromId(), wvpRedisMsg.getSerial());
+
                                     break;
                                 default:
                                     break;
@@ -232,7 +230,7 @@ public class RedisGbPlayMsgListener implements MessageListener {
         param.put("pt", requestPushStreamMsg.getPt());
         param.put("use_ps", requestPushStreamMsg.isPs() ? "1" : "0");
         param.put("only_audio", requestPushStreamMsg.isOnlyAudio() ? "1" : "0");
-        JSONObject jsonObject = zlmrtpServerFactory.startSendRtpStream(mediaInfo, param);
+        JSONObject jsonObject = zlmServerFactory.startSendRtpStream(mediaInfo, param);
         // 回复消息
         responsePushStream(jsonObject, fromId, serial);
     }
@@ -246,7 +244,7 @@ public class RedisGbPlayMsgListener implements MessageListener {
         WvpRedisMsg response = WvpRedisMsg.getResponseInstance(userSetting.getServerId(), toId,
                 WvpRedisMsgCmd.REQUEST_PUSH_STREAM, serial, result);
         JSONObject jsonObject = (JSONObject)JSON.toJSON(response);
-        RedisUtil.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+        redisTemplate.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
     }
 
     /**
@@ -265,12 +263,12 @@ public class RedisGbPlayMsgListener implements MessageListener {
                     WvpRedisMsgCmd.GET_SEND_ITEM, serial, result);
 
             JSONObject jsonObject = (JSONObject)JSON.toJSON(response);
-            RedisUtil.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+            redisTemplate.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
             return;
         }
         // 确定流是否在线
-        boolean streamReady = zlmrtpServerFactory.isStreamReady(mediaServerItem, content.getApp(), content.getStream());
-        if (streamReady) {
+        Boolean streamReady = zlmServerFactory.isStreamReady(mediaServerItem, content.getApp(), content.getStream());
+        if (streamReady != null && streamReady) {
             logger.info("[回复推流信息]  {}/{}", content.getApp(), content.getStream());
             responseSendItem(mediaServerItem, content, toId, serial);
         }else {
@@ -288,13 +286,13 @@ public class RedisGbPlayMsgListener implements MessageListener {
                         userSetting.getServerId(), toId, WvpRedisMsgCmd.GET_SEND_ITEM, serial, result
                 );
                 JSONObject jsonObject = (JSONObject)JSON.toJSON(response);
-                RedisUtil.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+                redisTemplate.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
             }, userSetting.getPlatformPlayTimeout());
 
             // 添加订阅
             HookSubscribeForStreamChange hookSubscribe = HookSubscribeFactory.on_stream_changed(content.getApp(), content.getStream(), true, "rtsp", mediaServerItem.getId());
 
-            subscribe.addSubscribe(hookSubscribe, (MediaServerItem mediaServerItemInUse, JSONObject json)->{
+            subscribe.addSubscribe(hookSubscribe, (mediaServerItemInUse, hookParam)->{
                         dynamicTask.stop(taskKey);
                         responseSendItem(mediaServerItem, content, toId, serial);
                     });
@@ -302,8 +300,10 @@ public class RedisGbPlayMsgListener implements MessageListener {
             MessageForPushChannel messageForPushChannel = MessageForPushChannel.getInstance(1, content.getApp(), content.getStream(),
                     content.getChannelId(), content.getPlatformId(), content.getPlatformName(), content.getServerId(),
                     content.getMediaServerId());
-            redisCatchStorage.sendStreamPushRequestedMsg(messageForPushChannel);
 
+            String key = VideoManagerConstants.VM_MSG_STREAM_PUSH_REQUESTED;
+            logger.info("[redis发送通知] 推流被请求 {}: {}/{}", key, messageForPushChannel.getApp(), messageForPushChannel.getStream());
+            redisTemplate.convertAndSend(key, JSON.toJSON(messageForPushChannel));
         }
     }
 
@@ -311,7 +311,7 @@ public class RedisGbPlayMsgListener implements MessageListener {
      * 将获取到的sendItem发送出去
      */
     private void responseSendItem(MediaServerItem mediaServerItem, RequestSendItemMsg content, String toId, String serial) {
-        SendRtpItem sendRtpItem = zlmrtpServerFactory.createSendRtpItem(mediaServerItem, content.getIp(),
+        SendRtpItem sendRtpItem = zlmServerFactory.createSendRtpItem(mediaServerItem, content.getIp(),
                 content.getPort(), content.getSsrc(), content.getPlatformId(),
                 content.getApp(), content.getStream(), content.getChannelId(),
                 content.getTcp(), content.getRtcp());
@@ -327,7 +327,7 @@ public class RedisGbPlayMsgListener implements MessageListener {
                 userSetting.getServerId(), toId, WvpRedisMsgCmd.GET_SEND_ITEM, serial, result
         );
         JSONObject jsonObject = (JSONObject)JSON.toJSON(response);
-        RedisUtil.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+        redisTemplate.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
     }
 
     /**
@@ -364,7 +364,7 @@ public class RedisGbPlayMsgListener implements MessageListener {
             wvpResult.setMsg("timeout");
             errorCallback.handler(wvpResult);
         }, userSetting.getPlatformPlayTimeout());
-        RedisUtil.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+        redisTemplate.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
     }
 
     /**
@@ -389,6 +389,33 @@ public class RedisGbPlayMsgListener implements MessageListener {
             callbacksForStartSendRtpStream.remove(key);
             callbacksForError.remove(key);
         });
-        RedisUtil.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+        redisTemplate.convertAndSend(WVP_PUSH_STREAM_KEY, jsonObject);
+    }
+
+    private SendRtpItem querySendRTPServer(String platformGbId, String channelId, String streamId, String callId) {
+        if (platformGbId == null) {
+            platformGbId = "*";
+        }
+        if (channelId == null) {
+            channelId = "*";
+        }
+        if (streamId == null) {
+            streamId = "*";
+        }
+        if (callId == null) {
+            callId = "*";
+        }
+        String key = VideoManagerConstants.PLATFORM_SEND_RTP_INFO_PREFIX
+                + userSetting.getServerId() + "_*_"
+                + platformGbId + "_"
+                + channelId + "_"
+                + streamId + "_"
+                + callId;
+        List<Object> scan = RedisUtil.scan(redisTemplate, key);
+        if (scan.size() > 0) {
+            return (SendRtpItem)redisTemplate.opsForValue().get(scan.get(0));
+        }else {
+            return null;
+        }
     }
 }

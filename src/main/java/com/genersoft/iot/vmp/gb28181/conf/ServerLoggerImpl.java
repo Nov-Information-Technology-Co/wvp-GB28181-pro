@@ -1,5 +1,6 @@
 package com.genersoft.iot.vmp.gb28181.conf;
 
+import gov.nist.core.CommonLogger;
 import gov.nist.core.ServerLogger;
 import gov.nist.core.StackLogger;
 import gov.nist.javax.sip.message.SIPMessage;
@@ -27,7 +28,7 @@ public class ServerLoggerImpl implements ServerLogger {
             return;
         }
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(!sender? "发送：目标--->" + from:"接收：来自--->" + to)
+        stringBuilder.append(sender? "发送：目标--->" + from:"接收：来自--->" + to)
                 .append("\r\n")
                         .append(message);
         this.stackLogger.logInfo(stringBuilder.toString());
@@ -40,7 +41,7 @@ public class ServerLoggerImpl implements ServerLogger {
             return;
         }
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(!sender? "发送： 目标->" + from :"接收：来自->" + to)
+        stringBuilder.append(sender? "发送： 目标->" + from :"接收：来自->" + to)
                 .append("\r\n")
                 .append(message);
         this.stackLogger.logInfo(stringBuilder.toString());
@@ -52,7 +53,7 @@ public class ServerLoggerImpl implements ServerLogger {
             return;
         }
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(!sender? "发送： 目标->" + from :"接收：来自->" + to)
+        stringBuilder.append(sender? "发送： 目标->" + from :"接收：来自->" + to)
                 .append("\r\n")
                 .append(message);
         this.stackLogger.logInfo(stringBuilder.toString());
@@ -84,9 +85,7 @@ public class ServerLoggerImpl implements ServerLogger {
         }
         if(sipStack instanceof SIPTransactionStack) {
             this.sipStack = (SIPTransactionStack)sipStack;
-            this.stackLogger = this.sipStack.getStackLogger();
+            this.stackLogger = CommonLogger.getLogger(SIPTransactionStack.class);
         }
     }
-
-
 }

@@ -183,14 +183,11 @@ public class ParentPlatform {
     @Schema(description = "创建时间")
     private String createTime;
 
-    /**
-     * 树类型 国标规定了两种树的展现方式 行政区划 CivilCode 和业务分组:BusinessGroup
-     */
-    @Schema(description = "树类型 国标规定了两种树的展现方式 行政区划 CivilCode 和业务分组:BusinessGrou")
-    private String treeType;
-
     @Schema(description = "是否作为消息通道")
     private boolean asMessageChannel;
+
+    @Schema(description = "是否作为消息通道")
+    private boolean autoPushChannel;
 
     public Integer getId() {
         return id;
@@ -424,19 +421,19 @@ public class ParentPlatform {
         this.createTime = createTime;
     }
 
-    public String getTreeType() {
-        return treeType;
-    }
-
-    public void setTreeType(String treeType) {
-        this.treeType = treeType;
-    }
-
     public boolean isAsMessageChannel() {
         return asMessageChannel;
     }
 
     public void setAsMessageChannel(boolean asMessageChannel) {
         this.asMessageChannel = asMessageChannel;
+    }
+
+    public boolean isAutoPushChannel() {
+        return autoPushChannel;
+    }
+
+    public void setAutoPushChannel(boolean autoPushChannel) {
+        this.autoPushChannel = autoPushChannel;
     }
 }

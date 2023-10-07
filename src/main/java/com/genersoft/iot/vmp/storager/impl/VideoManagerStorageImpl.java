@@ -123,6 +123,143 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 		TransactionStatus transactionStatus = dataSourceTransactionManager.getTransaction(transactionDefinition);
 		// 数据去重
 		List<DeviceChannel> channels = new ArrayList<>();
+
+		List<DeviceChannel> updateChannels = new ArrayList<>();
+		List<DeviceChannel> addChannels = new ArrayList<>();
+		StringBuilder stringBuilder = new StringBuilder();
+		Map<String, Integer> subContMap = new HashMap<>();
+
+		// 数据去重
+		Set<String> gbIdSet = new HashSet<>();
+		for (DeviceChannel deviceChannel : deviceChannelList) {
+			if (gbIdSet.contains(deviceChannel.getChannelId())) {
+				stringBuilder.append(deviceChannel.getChannelId()).append(",");
+				continue;
+			}
+			gbIdSet.add(deviceChannel.getChannelId());
+			if (allChannelMap.containsKey(deviceChannel.getChannelId())) {
+				deviceChannel.setStreamId(allChannelMap.get(deviceChannel.getChannelId()).getStreamId());
+				deviceChannel.setHasAudio(allChannelMap.get(deviceChannel.getChannelId()).isHasAudio());
+				if (allChannelMap.get(deviceChannel.getChannelId()).isStatus() !=deviceChannel.isStatus()){
+					List<String> strings = platformChannelMapper.queryParentPlatformByChannelId(deviceChannel.getChannelId());
+					if (!CollectionUtils.isEmpty(strings)){
+						strings.forEach(platformId->{
+							eventPublisher.catalogEventPublish(platformId, deviceChannel, deviceChannel.isStatus()?CatalogEvent.ON:CatalogEvent.OFF);
+						});
+					}
+
+				}
+				deviceChannel.setUpdateTime(DateUtil.getNow());
+				updateChannels.add(deviceChannel);
+			}else {
+				deviceChannel.setCreateTime(DateUtil.getNow());
+				deviceChannel.setUpdateTime(DateUtil.getNow());
+				addChannels.add(deviceChannel);
+			}
+			channels.add(deviceChannel);
+			if (!ObjectUtils.isEmpty(deviceChannel.getParentId())) {
+				if (subContMap.get(deviceChannel.getParentId()) == null) {
+					subContMap.put(deviceChannel.getParentId(), 1);
+				}else {
+					Integer count = subContMap.get(deviceChannel.getParentId());
+					subContMap.put(deviceChannel.getParentId(), count++);
+				}
+			}
+		}
+		if (channels.size() > 0) {
+			for (DeviceChannel channel : channels) {
+				if (subContMap.get(channel.getChannelId()) != null){
+					Integer count = subContMap.get(channel.getChannelId());
+					if (count > 0) {
+						channel.setSubCount(count);
+						channel.setParental(1);
+					}
+				}
+			}
+		}
+
+		if (stringBuilder.length() > 0) {
+			logger.info("[目录查询]收到的数据存在重复： {}" , stringBuilder);
+		}
+		if(CollectionUtils.isEmpty(channels)){
+			logger.info("通道重设，数据为空={}" , deviceChannelList);
+			return false;
+		}
+		try {
+			int limitCount = 50;
+			int cleanChannelsResult = 0;
+			if (channels.size() > limitCount) {
+				for (int i = 0; i < channels.size(); i += limitCount) {
+					int toIndex = i + limitCount;
+					if (i + limitCount > channels.size()) {
+						toIndex = channels.size();
+					}
+					cleanChannelsResult += this.deviceChannelMapper.cleanChannelsNotInList(deviceId, channels.subList(i, toIndex));
+				}
+			} else {
+				cleanChannelsResult = this.deviceChannelMapper.cleanChannelsNotInList(deviceId, channels);
+			}
+			boolean result = cleanChannelsResult < 0;
+			if (!result && addChannels.size() > 0) {
+				if (addChannels.size() > limitCount) {
+					for (int i = 0; i < addChannels.size(); i += limitCount) {
+						int toIndex = i + limitCount;
+						if (i + limitCount > addChannels.size()) {
+							toIndex = addChannels.size();
+						}
+						result = result || deviceChannelMapper.batchAdd(addChannels.subList(i, toIndex)) < 0;
+					}
+				}else {
+					result = result || deviceChannelMapper.batchAdd(addChannels) < 0;
+				}
+			}
+			if (!result && updateChannels.size() > 0) {
+				if (updateChannels.size() > limitCount) {
+					for (int i = 0; i < updateChannels.size(); i += limitCount) {
+						int toIndex = i + limitCount;
+						if (i + limitCount > updateChannels.size()) {
+							toIndex = updateChannels.size();
+						}
+						result = result || deviceChannelMapper.batchUpdate(updateChannels.subList(i, toIndex)) < 0;
+					}
+				}else {
+					result = result || deviceChannelMapper.batchUpdate(updateChannels) < 0;
+				}
+			}
+
+			if (result) {
+				//事务回滚
+				dataSourceTransactionManager.rollback(transactionStatus);
+			}
+			dataSourceTransactionManager.commit(transactionStatus);     //手动提交
+			return true;
+		}catch (Exception e) {
+			logger.error("未处理的异常 ", e);
+			dataSourceTransactionManager.rollback(transactionStatus);
+			return false;
+		}
+
+	}
+
+
+	@Override
+	public boolean updateChannels(String deviceId, List<DeviceChannel> deviceChannelList) {
+		if (CollectionUtils.isEmpty(deviceChannelList)) {
+			return false;
+		}
+		List<DeviceChannel> allChannels = deviceChannelMapper.queryAllChannels(deviceId);
+		Map<String,DeviceChannel> allChannelMap = new ConcurrentHashMap<>();
+		if (allChannels.size() > 0) {
+			for (DeviceChannel deviceChannel : allChannels) {
+				allChannelMap.put(deviceChannel.getChannelId(), deviceChannel);
+			}
+		}
+		TransactionStatus transactionStatus = dataSourceTransactionManager.getTransaction(transactionDefinition);
+		// 数据去重
+		List<DeviceChannel> channels = new ArrayList<>();
+
+		List<DeviceChannel> updateChannels = new ArrayList<>();
+		List<DeviceChannel> addChannels = new ArrayList<>();
 		StringBuilder stringBuilder = new StringBuilder();
 		Map<String, Integer> subContMap = new HashMap<>();
 		if (deviceChannelList.size() > 0) {
@@ -131,18 +268,22 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 			for (DeviceChannel deviceChannel : deviceChannelList) {
 				if (!gbIdSet.contains(deviceChannel.getChannelId())) {
 					gbIdSet.add(deviceChannel.getChannelId());
+					deviceChannel.setUpdateTime(DateUtil.getNow());
 					if (allChannelMap.containsKey(deviceChannel.getChannelId())) {
 						deviceChannel.setStreamId(allChannelMap.get(deviceChannel.getChannelId()).getStreamId());
 						deviceChannel.setHasAudio(allChannelMap.get(deviceChannel.getChannelId()).isHasAudio());
-						if (allChannelMap.get(deviceChannel.getChannelId()).getStatus() !=deviceChannel.getStatus()){
+						if (allChannelMap.get(deviceChannel.getChannelId()).isStatus() !=deviceChannel.isStatus()){
 							List<String> strings = platformChannelMapper.queryParentPlatformByChannelId(deviceChannel.getChannelId());
 							if (!CollectionUtils.isEmpty(strings)){
 								strings.forEach(platformId->{
-									eventPublisher.catalogEventPublish(platformId, deviceChannel, deviceChannel.getStatus()==1?CatalogEvent.ON:CatalogEvent.OFF);
+									eventPublisher.catalogEventPublish(platformId, deviceChannel, deviceChannel.isStatus()?CatalogEvent.ON:CatalogEvent.OFF);
 								});
 							}
-
 						}
+						updateChannels.add(deviceChannel);
+					}else {
+						deviceChannel.setCreateTime(DateUtil.getNow());
+						addChannels.add(deviceChannel);
 					}
 					channels.add(deviceChannel);
 					if (!ObjectUtils.isEmpty(deviceChannel.getParentId())) {
@@ -174,109 +315,7 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 			return false;
 		}
 		try {
-			int cleanChannelsResult = deviceChannelMapper.cleanChannelsNotInList(deviceId, channels);
-			int limitCount = 300;
-			boolean result = cleanChannelsResult < 0;
-			if (!result && channels.size() > 0) {
-				if (channels.size() > limitCount) {
-					for (int i = 0; i < channels.size(); i += limitCount) {
-						int toIndex = i + limitCount;
-						if (i + limitCount > channels.size()) {
-							toIndex = channels.size();
-						}
-						result = result || deviceChannelMapper.batchAdd(channels.subList(i, toIndex)) < 0;
-					}
-				}else {
-					result = result || deviceChannelMapper.batchAdd(channels) < 0;
-				}
-			}
-			if (result) {
-				//事务回滚
-				dataSourceTransactionManager.rollback(transactionStatus);
-			}
-			dataSourceTransactionManager.commit(transactionStatus);     //手动提交
-			return true;
-		}catch (Exception e) {
-			logger.error("未处理的异常 ", e);
-			dataSourceTransactionManager.rollback(transactionStatus);
-			return false;
-		}
-
-	}
-
-
-	@Override
-	public boolean updateChannels(String deviceId, List<DeviceChannel> deviceChannelList) {
-		if (CollectionUtils.isEmpty(deviceChannelList)) {
-			return false;
-		}
-		List<DeviceChannel> allChannels = deviceChannelMapper.queryAllChannels(deviceId);
-		Map<String,DeviceChannel> allChannelMap = new ConcurrentHashMap<>();
-		if (allChannels.size() > 0) {
-			for (DeviceChannel deviceChannel : allChannels) {
-				allChannelMap.put(deviceChannel.getChannelId(), deviceChannel);
-			}
-		}
-		List<DeviceChannel> addChannels = new ArrayList<>();
-		List<DeviceChannel> updateChannels = new ArrayList<>();
-
-
-		TransactionStatus transactionStatus = dataSourceTransactionManager.getTransaction(transactionDefinition);
-		// 数据去重
-		StringBuilder stringBuilder = new StringBuilder();
-		Map<String, Integer> subContMap = new HashMap<>();
-		if (deviceChannelList.size() > 0) {
-			// 数据去重
-			Set<String> gbIdSet = new HashSet<>();
-			for (DeviceChannel deviceChannel : deviceChannelList) {
-				if (!gbIdSet.contains(deviceChannel.getChannelId())) {
-					gbIdSet.add(deviceChannel.getChannelId());
-					if (allChannelMap.containsKey(deviceChannel.getChannelId())) {
-						deviceChannel.setStreamId(allChannelMap.get(deviceChannel.getChannelId()).getStreamId());
-						deviceChannel.setHasAudio(allChannelMap.get(deviceChannel.getChannelId()).isHasAudio());
-						deviceChannel.setUpdateTime(DateUtil.getNow());
-						updateChannels.add(deviceChannel);
-					}else {
-						deviceChannel.setCreateTime(DateUtil.getNow());
-						addChannels.add(deviceChannel);
-					}
-					if (!ObjectUtils.isEmpty(deviceChannel.getParentId())) {
-						if (subContMap.get(deviceChannel.getParentId()) == null) {
-							subContMap.put(deviceChannel.getParentId(), 1);
-						}else {
-							Integer count = subContMap.get(deviceChannel.getParentId());
-							subContMap.put(deviceChannel.getParentId(), count++);
-						}
-					}
-				}else {
-					stringBuilder.append(deviceChannel.getChannelId()).append(",");
-				}
-			}
-			if (addChannels.size() > 0) {
-				for (DeviceChannel channel : addChannels) {
-					if (subContMap.get(channel.getChannelId()) != null){
-						channel.setSubCount(subContMap.get(channel.getChannelId()));
-					}
-				}
-			}
-			if (updateChannels.size() > 0) {
-				for (DeviceChannel channel : updateChannels) {
-					if (subContMap.get(channel.getChannelId()) != null){
-						channel.setSubCount(subContMap.get(channel.getChannelId()));
-					}
-				}
-			}
-
-		}
-		if (stringBuilder.length() > 0) {
-			logger.info("[目录查询]收到的数据存在重复： {}" , stringBuilder);
-		}
-		if(CollectionUtils.isEmpty(updateChannels) && CollectionUtils.isEmpty(addChannels) ){
-			logger.info("通道更新，数据为空={}" , deviceChannelList);
-			return false;
-		}
-		try {
-			int limitCount = 300;
+			int limitCount = 50;
 			boolean result = false;
 			if (addChannels.size() > 0) {
 				if (addChannels.size() > limitCount) {
@@ -304,13 +343,12 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 					result = result || deviceChannelMapper.batchUpdate(updateChannels) < 0;
 				}
 			}
+
 			if (result) {
 				//事务回滚
 				dataSourceTransactionManager.rollback(transactionStatus);
-			}else {
-				//手动提交
-				dataSourceTransactionManager.commit(transactionStatus);
 			}
+			dataSourceTransactionManager.commit(transactionStatus);     //手动提交
 			return true;
 		}catch (Exception e) {
 			logger.error("未处理的异常 ", e);
@@ -441,9 +479,6 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 	 */
 	@Override
 	public synchronized boolean insertMobilePosition(MobilePosition mobilePosition) {
-		if (mobilePosition.getDeviceId().equals(mobilePosition.getChannelId())) {
-			mobilePosition.setChannelId(null);
-		}
 		return deviceMobilePositionMapper.insertNewPosition(mobilePosition) > 0;
 	}
 
@@ -776,25 +811,49 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 		if (platform == null) {
 			return 0;
 		}
-		if (platform.getTreeType().equals(TreeType.BUSINESS_GROUP)) {
-			if (platform.getDeviceGBId().equals(platformCatalog.getParentId())) {
-				// 第一层节点
-				platformCatalog.setBusinessGroupId(platformCatalog.getId());
-				platformCatalog.setParentId(platform.getDeviceGBId());
-			}else {
-				// 获取顶层的
-				PlatformCatalog topCatalog = getTopCatalog(platformCatalog.getParentId(), platform.getDeviceGBId());
-				platformCatalog.setBusinessGroupId(topCatalog.getId());
+		if (platformCatalog.getId().length() <= 8) {
+			platformCatalog.setCivilCode(platformCatalog.getParentId());
+		}else {
+			if (platformCatalog.getId().length() != 20) {
+				return 0;
+			}
+			if (platformCatalog.getParentId() != null) {
+				switch (Integer.parseInt(platformCatalog.getId().substring(10, 13))){
+					case 200:
+					case 215:
+						if (platformCatalog.getParentId().length() <= 8) {
+							platformCatalog.setCivilCode(platformCatalog.getParentId());
+						}else {
+							PlatformCatalog catalog = catalogMapper.selectByPlatFormAndCatalogId(platformCatalog.getPlatformId(), platformCatalog.getParentId());
+							if (catalog != null) {
+								platformCatalog.setCivilCode(catalog.getCivilCode());
+							}
+						}
+						break;
+					case 216:
+						if (platformCatalog.getParentId().length() <= 8) {
+							platformCatalog.setCivilCode(platformCatalog.getParentId());
+						}else {
+							PlatformCatalog catalog = catalogMapper.selectByPlatFormAndCatalogId(platformCatalog.getPlatformId(),platformCatalog.getParentId());
+							if (catalog == null) {
+								logger.warn("[添加目录] 无法获取目录{}的CivilCode和BusinessGroupId", platformCatalog.getPlatformId());
+								break;
+							}
+							platformCatalog.setCivilCode(catalog.getCivilCode());
+							if (Integer.parseInt(platformCatalog.getParentId().substring(10, 13)) == 215) {
+								platformCatalog.setBusinessGroupId(platformCatalog.getParentId());
+							}else {
+								if (Integer.parseInt(platformCatalog.getParentId().substring(10, 13)) == 216) {
+									platformCatalog.setBusinessGroupId(catalog.getBusinessGroupId());
+								}
+							}
+						}
+						break;
+					default:
+						break;
+				}
 			}
 		}
-		if (platform.getTreeType().equals(TreeType.CIVIL_CODE)) {
-			platformCatalog.setCivilCode(platformCatalog.getId());
-			if (platformCatalog.getPlatformId().equals(platformCatalog.getParentId())) {
-				// 第一层节点
-				platformCatalog.setParentId(platform.getDeviceGBId());
-			}
-		}
-
 		int result = catalogMapper.add(platformCatalog);
 		if (result > 0) {
 			DeviceChannel deviceChannel = getDeviceChannelByCatalog(platformCatalog);
@@ -804,7 +863,7 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 	}
 
 	private PlatformCatalog getTopCatalog(String id, String platformId) {
-		PlatformCatalog catalog = catalogMapper.selectParentCatalog(id);
+		PlatformCatalog catalog = catalogMapper.selectByPlatFormAndCatalogId(platformId, id);
 		if (catalog.getParentId().equals(platformId)) {
 			return catalog;
 		}else {
@@ -813,27 +872,16 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 	}
 
 	@Override
-	public PlatformCatalog getCatalog(String id) {
-		return catalogMapper.select(id);
+	public PlatformCatalog getCatalog(String platformId, String id) {
+		return catalogMapper.selectByPlatFormAndCatalogId(platformId, id);
 	}
 
 	@Override
-	public int delCatalog(String id) {
-		PlatformCatalog platformCatalog = catalogMapper.select(id);
-		if (platformCatalog.getChildrenCount() > 0) {
-			List<PlatformCatalog> platformCatalogList = catalogMapper.selectByParentId(platformCatalog.getPlatformId(), platformCatalog.getId());
-			for (PlatformCatalog catalog : platformCatalogList) {
-				if (catalog.getChildrenCount() == 0) {
-					delCatalogExecute(catalog.getId(), catalog.getPlatformId());
-				}else {
-					delCatalog(catalog.getId());
-				}
-			}
-		}
-		return delCatalogExecute(id, platformCatalog.getPlatformId());
+	public int delCatalog(String platformId, String id) {
+		return delCatalogExecute(id, platformId);
 	}
 	private int delCatalogExecute(String id, String platformId) {
-		int delresult =  catalogMapper.del(id);
+		int delresult =  catalogMapper.del(platformId, id);
 		DeviceChannel deviceChannelForCatalog = new DeviceChannel();
 		if (delresult > 0){
 			deviceChannelForCatalog.setChannelId(id);
@@ -850,7 +898,7 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 			}
 			eventPublisher.catalogEventPublish(platformId, deviceChannelList, CatalogEvent.DEL);
 		}
-		int delStreamresult = platformGbStreamMapper.delByCatalogId(id);
+		int delStreamresult = platformGbStreamMapper.delByPlatformAndCatalogId(platformId,id);
 		List<PlatformCatalog> platformCatalogs = platformChannelMapper.queryChannelInParentPlatformAndCatalog(platformId, id);
 		if (platformCatalogs.size() > 0){
 			List<DeviceChannel> deviceChannelList = new ArrayList<>();
@@ -861,7 +909,7 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 			}
 			eventPublisher.catalogEventPublish(platformId, deviceChannelList, CatalogEvent.DEL);
 		}
-		int delChannelresult = platformChannelMapper.delByCatalogId(id);
+		int delChannelresult = platformChannelMapper.delByCatalogId(platformId, id);
 		return delresult + delChannelresult + delStreamresult;
 	}
 
@@ -918,19 +966,14 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 		DeviceChannel deviceChannel = new DeviceChannel();
 		deviceChannel.setChannelId(catalog.getId());
 		deviceChannel.setName(catalog.getName());
-		deviceChannel.setLongitude(0.0);
-		deviceChannel.setLatitude(0.0);
 		deviceChannel.setDeviceId(platform.getDeviceGBId());
 		deviceChannel.setManufacture("wvp-pro");
-		deviceChannel.setStatus(1);
+		deviceChannel.setStatus(true);
 		deviceChannel.setParental(1);
 
 		deviceChannel.setRegisterWay(1);
-		// 行政区划应该是Domain的前八位
-		if (platform.getTreeType().equals(TreeType.BUSINESS_GROUP)) {
-			deviceChannel.setParentId(catalog.getParentId());
-			deviceChannel.setBusinessGroupId(catalog.getBusinessGroupId());
-		}
+		deviceChannel.setParentId(catalog.getParentId());
+		deviceChannel.setBusinessGroupId(catalog.getBusinessGroupId());
 
 		deviceChannel.setModel("live");
 		deviceChannel.setOwner("wvp-pro");

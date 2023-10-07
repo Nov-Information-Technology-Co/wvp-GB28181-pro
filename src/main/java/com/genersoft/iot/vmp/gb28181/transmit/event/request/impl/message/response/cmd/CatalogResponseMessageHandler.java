@@ -1,5 +1,7 @@
 package com.genersoft.iot.vmp.gb28181.transmit.event.request.impl.message.response.cmd;
 
+import com.genersoft.iot.vmp.conf.CivilCodeFileConf;
+import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.gb28181.bean.*;
 import com.genersoft.iot.vmp.gb28181.session.CatalogDataCatch;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.SIPRequestProcessorParent;
@@ -28,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 目录查询的回复
@@ -53,6 +56,13 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
     @Autowired
     private ThreadPoolTaskExecutor taskExecutor;
 
+    @Autowired
+    private CivilCodeFileConf civilCodeFileConf;
+
+    @Autowired
+    private SipConfig sipConfig;
+    private AtomicBoolean processing = new AtomicBoolean(false);
+
     @Override
     public void afterPropertiesSet() throws Exception {
         responseMessageHandler.addHandler(cmdType, this);
@@ -60,7 +70,6 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
 
     @Override
     public void handForDevice(RequestEvent evt, Device device, Element element) {
-        boolean isEmpty = taskQueue.isEmpty();
         taskQueue.offer(new HandlerCatchData(evt, device, element));
         // 回复200 OK
         try {
@@ -68,8 +77,8 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
         } catch (SipException | InvalidArgumentException | ParseException e) {
             logger.error("[命令发送失败] 目录查询回复: {}", e.getMessage());
         }
-        // 如果不为空则说明已经开启消息处理
-        if (isEmpty) {
+        // 已经开启消息处理则跳过
+        if (processing.compareAndSet(false, true)) {
             taskExecutor.execute(() -> {
                 while (!taskQueue.isEmpty()) {
                     // 全局异常捕获，保证下一条可以得到处理
@@ -100,6 +109,7 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
                             Iterator<Element> deviceListIterator = deviceListElement.elementIterator();
                             if (deviceListIterator != null) {
                                 List<DeviceChannel> channelList = new ArrayList<>();
+                                List<String> parentChannelIds = new ArrayList<>();
                                 // 遍历DeviceList
                                 while (deviceListIterator.hasNext()) {
                                     Element itemDevice = deviceListIterator.next();
@@ -107,11 +117,18 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
                                     if (channelDeviceElement == null) {
                                         continue;
                                     }
-                                    DeviceChannel deviceChannel = XmlUtil.channelContentHander(itemDevice, device, null);
-                                    deviceChannel = SipUtils.updateGps(deviceChannel, device.getGeoCoordSys());
-                                    deviceChannel.setDeviceId(take.getDevice().getDeviceId());
+                                    DeviceChannel channel = XmlUtil.channelContentHandler(itemDevice, device, null, civilCodeFileConf);
+                                    if (channel == null) {
+                                        logger.info("[收到目录订阅]：但是解析失败 {}", new String(evt.getRequest().getRawContent()));
+                                        continue;
+                                    }
+                                    if (channel.getParentId() != null && channel.getParentId().equals(sipConfig.getId())) {
+                                        channel.setParentId(null);
+                                    }
+                                    SipUtils.updateGps(channel, device.getGeoCoordSys());
+                                    channel.setDeviceId(take.getDevice().getDeviceId());
 
-                                    channelList.add(deviceChannel);
+                                    channelList.add(channel);
                                 }
                                 int sn = Integer.parseInt(snElement.getText());
                                 catalogDataCatch.put(take.getDevice().getDeviceId(), sn, sumNum, take.getDevice(), channelList);
@@ -130,11 +147,12 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
                             }
 
                         }
-                    }catch (Exception e) {
+                    } catch (Exception e) {
                         logger.warn("[收到通道] 发现未处理的异常, \r\n{}", evt.getRequest());
                         logger.error("[收到通道] 异常内容： ", e);
                     }
                 }
+                processing.set(false);
             });
         }
 

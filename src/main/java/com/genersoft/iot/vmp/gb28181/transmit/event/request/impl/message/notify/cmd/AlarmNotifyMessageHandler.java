@@ -137,6 +137,7 @@ public class AlarmNotifyMessageHandler extends SIPRequestProcessorParent impleme
                                 MobilePosition mobilePosition = new MobilePosition();
                                 mobilePosition.setCreateTime(DateUtil.getNow());
                                 mobilePosition.setDeviceId(deviceAlarm.getDeviceId());
+                                mobilePosition.setChannelId(channelId);
                                 mobilePosition.setTime(deviceAlarm.getAlarmTime());
                                 mobilePosition.setLongitude(deviceAlarm.getLongitude());
                                 mobilePosition.setLatitude(deviceAlarm.getLatitude());
@@ -164,7 +165,7 @@ public class AlarmNotifyMessageHandler extends SIPRequestProcessorParent impleme
 
                                 // 发送redis消息。 通知位置信息的变化
                                 JSONObject jsonObject = new JSONObject();
-                                jsonObject.put("time", mobilePosition.getTime());
+                                jsonObject.put("time", DateUtil.yyyy_MM_dd_HH_mm_ssToISO8601(mobilePosition.getTime()));
                                 jsonObject.put("serial", deviceChannel.getDeviceId());
                                 jsonObject.put("code", deviceChannel.getChannelId());
                                 jsonObject.put("longitude", mobilePosition.getLongitude());

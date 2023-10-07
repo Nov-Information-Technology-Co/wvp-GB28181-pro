@@ -2,6 +2,9 @@ package com.genersoft.iot.vmp.vmanager.gb28181.play;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.genersoft.iot.vmp.common.InviteInfo;
+import com.genersoft.iot.vmp.common.InviteSessionStatus;
+import com.genersoft.iot.vmp.common.InviteSessionType;
 import com.genersoft.iot.vmp.common.StreamInfo;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
@@ -14,12 +17,14 @@ import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
 import com.genersoft.iot.vmp.media.zlm.ZLMRESTfulUtils;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
+import com.genersoft.iot.vmp.service.IInviteStreamService;
 import com.genersoft.iot.vmp.service.IMediaServerService;
 import com.genersoft.iot.vmp.service.IMediaService;
 import com.genersoft.iot.vmp.service.IPlayService;
+import com.genersoft.iot.vmp.service.bean.InviteErrorCode;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.storager.IVideoManagerStorage;
-import com.genersoft.iot.vmp.vmanager.bean.DeferredResultEx;
+import com.genersoft.iot.vmp.utils.DateUtil;
 import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
 import com.genersoft.iot.vmp.vmanager.bean.StreamContent;
 import com.genersoft.iot.vmp.vmanager.bean.WVPResult;
@@ -35,6 +40,8 @@ import org.springframework.web.context.request.async.DeferredResult;
 import javax.servlet.http.HttpServletRequest;
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.text.ParseException;
 import java.util.List;
 import java.util.UUID;
@@ -58,6 +65,9 @@ public class PlayController {
 
 	@Autowired
 	private IRedisCatchStorage redisCatchStorage;
+
+	@Autowired
+	private IInviteStreamService inviteStreamService;
 
 	@Autowired
 	private ZLMRESTfulUtils zlmresTfulUtils;
@@ -84,59 +94,70 @@ public class PlayController {
 	public DeferredResult<WVPResult<StreamContent>> play(HttpServletRequest request, @PathVariable String deviceId,
 														 @PathVariable String channelId) {
 
+		logger.info("[开始点播] deviceId：{}, channelId：{}, ", deviceId, channelId);
 		// 获取可用的zlm
 		Device device = storager.queryVideoDevice(deviceId);
 		MediaServerItem newMediaServerItem = playService.getNewMediaServerItem(device);
 
-		RequestMessage msg = new RequestMessage();
+		RequestMessage requestMessage = new RequestMessage();
 		String key = DeferredResultHolder.CALLBACK_CMD_PLAY + deviceId + channelId;
-		boolean exist = resultHolder.exist(key, null);
-		msg.setKey(key);
+		requestMessage.setKey(key);
 		String uuid = UUID.randomUUID().toString();
-		msg.setId(uuid);
+		requestMessage.setId(uuid);
 		DeferredResult<WVPResult<StreamContent>> result = new DeferredResult<>(userSetting.getPlayTimeout().longValue());
-		DeferredResultEx<WVPResult<StreamContent>> deferredResultEx = new DeferredResultEx<>(result);
 
 		result.onTimeout(()->{
-			logger.info("点播接口等待超时");
+			logger.info("[点播等待超时] deviceId：{}, channelId：{}, ", deviceId, channelId);
 			// 释放rtpserver
 			WVPResult<StreamInfo> wvpResult = new WVPResult<>();
 			wvpResult.setCode(ErrorCode.ERROR100.getCode());
 			wvpResult.setMsg("点播超时");
-			msg.setData(wvpResult);
-			resultHolder.invokeResult(msg);
+			requestMessage.setData(wvpResult);
+			resultHolder.invokeAllResult(requestMessage);
+			inviteStreamService.removeInviteInfoByDeviceAndChannel(InviteSessionType.PLAY, deviceId, channelId);
+			storager.stopPlay(deviceId, channelId);
 		});
-		// TODO 在点播未成功的情况下在此调用接口点播会导致返回的流地址ip错误
-		deferredResultEx.setFilter(result1 -> {
-			WVPResult<StreamInfo> wvpResult1 = (WVPResult<StreamInfo>)result1;
-			WVPResult<StreamContent> resultStream = new WVPResult<>();
-			resultStream.setCode(wvpResult1.getCode());
-			resultStream.setMsg(wvpResult1.getMsg());
-			if (wvpResult1.getCode() == ErrorCode.SUCCESS.getCode()) {
-				StreamInfo data = wvpResult1.getData().clone();
-				if (userSetting.getUseSourceIpAsStreamIp()) {
-					data.channgeStreamIp(request.getLocalName());
-				}
-				resultStream.setData(new StreamContent(wvpResult1.getData()));
-			}
-			return resultStream;
-		});
-
 
 		// 录像查询以channelId作为deviceId查询
-		resultHolder.put(key, uuid, deferredResultEx);
+		resultHolder.put(key, uuid, result);
 
-		if (!exist) {
-			playService.play(newMediaServerItem, deviceId, channelId, null, null, null);
-		}
+		playService.play(newMediaServerItem, deviceId, channelId, null, (code, msg, data) -> {
+			WVPResult<StreamContent> wvpResult = new WVPResult<>();
+			if (code == InviteErrorCode.SUCCESS.getCode()) {
+				wvpResult.setCode(ErrorCode.SUCCESS.getCode());
+				wvpResult.setMsg(ErrorCode.SUCCESS.getMsg());
+
+				if (data != null) {
+					StreamInfo streamInfo = (StreamInfo)data;
+					if (userSetting.getUseSourceIpAsStreamIp()) {
+						streamInfo=streamInfo.clone();//深拷贝
+						String host;
+						try {
+							URL url=new URL(request.getRequestURL().toString());
+							host=url.getHost();
+						} catch (MalformedURLException e) {
+							host=request.getLocalAddr();
+						}
+						streamInfo.channgeStreamIp(host);
+					}
+					wvpResult.setData(new StreamContent(streamInfo));
+				}
+			}else {
+				wvpResult.setCode(code);
+				wvpResult.setMsg(msg);
+			}
+			requestMessage.setData(wvpResult);
+			resultHolder.invokeResult(requestMessage);
+		});
 		return result;
 	}
 
 	@Operation(summary = "停止点播")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
 	@Parameter(name = "channelId", description = "通道国标编号", required = true)
+	@Parameter(name = "isSubStream", description = "是否子码流（true-子码流，false-主码流），默认为false", required = true)
 	@GetMapping("/stop/{deviceId}/{channelId}")
-	public JSONObject playStop(@PathVariable String deviceId, @PathVariable String channelId) {
+	public JSONObject playStop(@PathVariable String deviceId, @PathVariable String channelId,boolean isSubStream) {
 
 		logger.debug(String.format("设备预览/回放停止API调用，streamId：%s_%s", deviceId, channelId ));
 
@@ -149,24 +170,26 @@ public class PlayController {
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备[" + deviceId + "]不存在");
 		}
 
-		StreamInfo streamInfo = redisCatchStorage.queryPlayByDevice(deviceId, channelId);
-		if (streamInfo == null) {
+		InviteInfo inviteInfo = inviteStreamService.getInviteInfoByDeviceAndChannel(InviteSessionType.PLAY, deviceId, channelId);
+		if (inviteInfo == null) {
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "点播未找到");
 		}
-
-		try {
-			logger.warn("[停止点播] {}/{}", device.getDeviceId(), channelId);
-			cmder.streamByeCmd(device, channelId, streamInfo.getStream(), null, null);
-		} catch (InvalidArgumentException | SipException | ParseException | SsrcTransactionNotFoundException e) {
-			logger.error("[命令发送失败] 停止点播， 发送BYE: {}", e.getMessage());
-			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
+		if (InviteSessionStatus.ok == inviteInfo.getStatus()) {
+			try {
+				logger.info("[停止点播] {}/{}", device.getDeviceId(), channelId);
+				cmder.streamByeCmd(device, channelId, inviteInfo.getStream(), null, null);
+			} catch (InvalidArgumentException | SipException | ParseException | SsrcTransactionNotFoundException e) {
+				logger.error("[命令发送失败] 停止点播， 发送BYE: {}", e.getMessage());
+				throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
+			}
 		}
-		redisCatchStorage.stopPlay(streamInfo);
+		inviteStreamService.removeInviteInfoByDeviceAndChannel(InviteSessionType.PLAY, deviceId, channelId);
+		storager.stopPlay(deviceId, channelId);
 
-		storager.stopPlay(streamInfo.getDeviceID(), streamInfo.getChannelId());
 		JSONObject json = new JSONObject();
 		json.put("deviceId", deviceId);
 		json.put("channelId", channelId);
+		json.put("isSubStream", isSubStream);
 		return json;
 	}
 
@@ -178,15 +201,14 @@ public class PlayController {
 	@Parameter(name = "streamId", description = "视频流ID", required = true)
 	@PostMapping("/convert/{streamId}")
 	public JSONObject playConvert(@PathVariable String streamId) {
-		StreamInfo streamInfo = redisCatchStorage.queryPlayByStreamId(streamId);
-		if (streamInfo == null) {
-			streamInfo = redisCatchStorage.queryPlayback(null, null, streamId, null);
-		}
-		if (streamInfo == null) {
+//		StreamInfo streamInfo = redisCatchStorage.queryPlayByStreamId(streamId);
+
+		InviteInfo inviteInfo = inviteStreamService.getInviteInfoByStream(null, streamId);
+		if (inviteInfo == null || inviteInfo.getStreamInfo() == null) {
 			logger.warn("视频转码API调用失败！, 视频流已经停止!");
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "未找到视频流信息, 视频流可能已经停止");
 		}
-		MediaServerItem mediaInfo = mediaServerService.getOne(streamInfo.getMediaServerId());
+		MediaServerItem mediaInfo = mediaServerService.getOne(inviteInfo.getStreamInfo().getMediaServerId());
 		JSONObject rtpInfo = zlmresTfulUtils.getRtpInfo(mediaInfo, streamId);
 		if (!rtpInfo.getBoolean("exist")) {
 			logger.warn("视频转码API调用失败！, 视频流已停止推流!");
@@ -329,6 +351,37 @@ public class PlayController {
 		jsonObject.put("data", objects);
 		jsonObject.put("count", objects.size());
 		return jsonObject;
+	}
+
+	@Operation(summary = "获取截图")
+	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
+	@Parameter(name = "channelId", description = "通道国标编号", required = true)
+	@Parameter(name = "isSubStream", description = "是否子码流（true-子码流，false-主码流），默认为false", required = true)
+	@GetMapping("/snap")
+	public DeferredResult<String> getSnap(String deviceId, String channelId,boolean isSubStream) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("获取截图: {}/{}", deviceId, channelId);
+		}
+
+		DeferredResult<String> result = new DeferredResult<>(3 * 1000L);
+		String key  = DeferredResultHolder.CALLBACK_CMD_SNAP + deviceId;
+		String uuid  = UUID.randomUUID().toString();
+		resultHolder.put(key, uuid,  result);
+
+		RequestMessage message = new RequestMessage();
+		message.setKey(key);
+		message.setId(uuid);
+
+		String fileName = deviceId + "_" + channelId + "_" + DateUtil.getNowForUrl() + ".jpg";
+		playService.getSnap(deviceId, channelId, fileName, (code, msg, data) -> {
+			if (code == InviteErrorCode.SUCCESS.getCode()) {
+				message.setData(data);
+			}else {
+				message.setData(WVPResult.fail(code, msg));
+			}
+			resultHolder.invokeResult(message);
+		});
+		return result;
 	}
 
 }

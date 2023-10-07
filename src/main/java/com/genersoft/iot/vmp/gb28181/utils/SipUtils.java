@@ -1,14 +1,22 @@
 package com.genersoft.iot.vmp.gb28181.utils;
 
 import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
+import com.genersoft.iot.vmp.gb28181.bean.Gb28181Sdp;
 import com.genersoft.iot.vmp.gb28181.bean.RemoteAddressInfo;
+import com.genersoft.iot.vmp.utils.DateUtil;
 import com.genersoft.iot.vmp.utils.GitUtil;
 import gov.nist.javax.sip.address.AddressImpl;
 import gov.nist.javax.sip.address.SipUri;
 import gov.nist.javax.sip.header.Subject;
 import gov.nist.javax.sip.message.SIPRequest;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.util.ObjectUtils;
 
+import javax.sdp.SdpFactory;
+import javax.sdp.SdpParseException;
+import javax.sdp.SessionDescription;
 import javax.sip.PeerUnavailableException;
 import javax.sip.SipFactory;
 import javax.sip.header.FromHeader;
@@ -16,6 +24,8 @@ import javax.sip.header.Header;
 import javax.sip.header.UserAgentHeader;
 import javax.sip.message.Request;
 import java.text.ParseException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +37,8 @@ import java.util.UUID;
  * @createTime 2021年09月27日 15:12:00
  */
 public class SipUtils {
+
+    private final static Logger logger = LoggerFactory.getLogger(SipUtils.class);
 
     public static String getUserIdFromFromHeader(Request request) {
         FromHeader fromHeader = (FromHeader)request.getHeader(FromHeader.NAME);
@@ -51,10 +63,10 @@ public class SipUtils {
     }
 
     public static  String getNewViaTag() {
-        return "z9hG4bK" + System.currentTimeMillis();
+        return "z9hG4bK" + RandomStringUtils.randomNumeric(10);
     }
 
-    public static UserAgentHeader createUserAgentHeader(SipFactory sipFactory, GitUtil gitUtil) throws PeerUnavailableException, ParseException {
+    public static UserAgentHeader createUserAgentHeader(GitUtil gitUtil) throws PeerUnavailableException, ParseException {
         List<String> agentParam = new ArrayList<>();
         agentParam.add("WVP-Pro ");
         if (gitUtil != null ) {
@@ -66,7 +78,7 @@ public class SipUtils {
                 agentParam.add(gitUtil.getCommitTime());
             }
         }
-        return sipFactory.createHeaderFactory().createUserAgentHeader(agentParam);
+        return SipFactory.getInstance().createHeaderFactory().createUserAgentHeader(agentParam);
     }
 
     public static String getNewFromTag(){
@@ -113,6 +125,12 @@ public class SipUtils {
         strTmp = String.format("%02X", moveSpeed);
         builder.append(strTmp, 0, 2);
         builder.append(strTmp, 0, 2);
+
+        //优化zoom低倍速下的变倍速率
+        if ((zoomSpeed > 0) && (zoomSpeed <16))
+        {
+            zoomSpeed = 16;
+        }
         strTmp = String.format("%X", zoomSpeed);
         builder.append(strTmp, 0, 1).append("0");
         //计算校验码
@@ -133,8 +151,9 @@ public class SipUtils {
         String remoteAddress;
         int remotePort;
         if (sipUseSourceIpAsRemoteAddress) {
-            remoteAddress = request.getRemoteAddress().getHostAddress();
-            remotePort = request.getRemotePort();
+            remoteAddress = request.getPeerPacketSourceAddress().getHostAddress();
+            remotePort = request.getPeerPacketSourcePort();
+
         }else {
             // 判断RPort是否改变，改变则说明路由nat信息变化，修改设备信息
             // 获取到通信地址等信息
@@ -142,8 +161,8 @@ public class SipUtils {
             remotePort = request.getTopmostViaHeader().getRPort();
             // 解析本地地址替代
             if (ObjectUtils.isEmpty(remoteAddress) || remotePort == -1) {
-                remoteAddress = request.getTopmostViaHeader().getHost();
-                remotePort = request.getTopmostViaHeader().getPort();
+                remoteAddress = request.getPeerPacketSourceAddress().getHostAddress();
+                remotePort = request.getPeerPacketSourcePort();
             }
         }
 
@@ -181,5 +200,67 @@ public class SipUtils {
             deviceChannel.setLatitudeWgs84(deviceChannel.getLatitude());
         }
         return deviceChannel;
+    }
+
+    public static Gb28181Sdp parseSDP(String sdpStr) throws SdpParseException {
+
+        // jainSip不支持y= f=字段， 移除以解析。
+        int ssrcIndex = sdpStr.indexOf("y=");
+        int mediaDescriptionIndex = sdpStr.indexOf("f=");
+        // 检查是否有y字段
+        SessionDescription sdp;
+        String ssrc = null;
+        String mediaDescription = null;
+        if (mediaDescriptionIndex == 0 && ssrcIndex == 0) {
+            sdp = SdpFactory.getInstance().createSessionDescription(sdpStr);
+        }else {
+            String lines[] = sdpStr.split("\\r?\\n");
+            StringBuilder sdpBuffer = new StringBuilder();
+            for (String line : lines) {
+                if (line.trim().startsWith("y=")) {
+                    ssrc = line.substring(2);
+                }else if (line.trim().startsWith("f=")) {
+                    mediaDescription = line.substring(2);
+                }else {
+                    sdpBuffer.append(line.trim()).append("\r\n");
+                }
+            }
+            sdp = SdpFactory.getInstance().createSessionDescription(sdpBuffer.toString());
+        }
+        return Gb28181Sdp.getInstance(sdp, ssrc, mediaDescription);
+    }
+
+    public static String getSsrcFromSdp(String sdpStr) {
+
+        // jainSip不支持y= f=字段， 移除以解析。
+        int ssrcIndex = sdpStr.indexOf("y=");
+        if (ssrcIndex == 0) {
+            return null;
+        }
+        String lines[] = sdpStr.split("\\r?\\n");
+        for (String line : lines) {
+            if (line.trim().startsWith("y=")) {
+                return line.substring(2);
+            }
+        }
+        return null;
+    }
+
+    public static String parseTime(String timeStr) {
+        if (ObjectUtils.isEmpty(timeStr)){
+            return null;
+        }
+        LocalDateTime localDateTime;
+        try {
+            localDateTime = LocalDateTime.parse(timeStr);
+        }catch (DateTimeParseException e) {
+            try {
+                localDateTime = LocalDateTime.parse(timeStr, DateUtil.formatterISO8601);
+            }catch (DateTimeParseException e2) {
+                logger.error("[格式化时间] 无法格式化时间： {}", timeStr);
+                return null;
+            }
+        }
+        return localDateTime.format(DateUtil.formatter);
     }
 }

@@ -2,11 +2,11 @@ package com.genersoft.iot.vmp.conf;
 
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.utils.DateUtil;
-import org.junit.jupiter.api.Order;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.util.ObjectUtils;
 
 import java.net.InetAddress;
@@ -74,6 +74,9 @@ public class MediaConfig{
 
     @Value("${media.rtp.port-range}")
     private String rtpPortRange;
+
+    @Value("${media.rtp.send-port-range}")
+    private String rtpSendPortRange;
 
     @Value("${media.record-assist-port:0}")
     private Integer recordAssistPort = 0;
@@ -206,6 +209,7 @@ public class MediaConfig{
         mediaServerItem.setSecret(secret);
         mediaServerItem.setRtpEnable(rtpEnable);
         mediaServerItem.setRtpPortRange(rtpPortRange);
+        mediaServerItem.setSendRtpPortRange(rtpSendPortRange);
         mediaServerItem.setRecordAssistPort(recordAssistPort);
         mediaServerItem.setHookAliveInterval(30.00f);
 
@@ -215,11 +219,18 @@ public class MediaConfig{
         return mediaServerItem;
     }
 
+    public String getRtpSendPortRange() {
+        return rtpSendPortRange;
+    }
+
+    public void setRtpSendPortRange(String rtpSendPortRange) {
+        this.rtpSendPortRange = rtpSendPortRange;
+    }
+
     private boolean isValidIPAddress(String ipAddress) {
         if ((ipAddress != null) && (!ipAddress.isEmpty())) {
             return Pattern.matches("^([1-9]|[1-9]\\d|1\\d{2}|2[0-4]\\d|25[0-5])(\\.(\\d|[1-9]\\d|1\\d{2}|2[0-4]\\d|25[0-5])){3}$", ipAddress);
         }
         return false;
     }
-
 }

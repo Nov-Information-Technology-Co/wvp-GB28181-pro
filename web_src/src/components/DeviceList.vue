@@ -25,11 +25,13 @@
       </el-table-column>
       <el-table-column prop="manufacturer" label="厂家" min-width="120" >
       </el-table-column>
+      <el-table-column prop="transport" label="信令传输模式" min-width="120" >
+      </el-table-column>
       <el-table-column label="流传输模式"  min-width="160" >
         <template slot-scope="scope">
           <el-select size="mini" @change="transportChange(scope.row)" v-model="scope.row.streamMode" placeholder="请选择" style="width: 120px">
             <el-option key="UDP" label="UDP" value="UDP"></el-option>
-            <el-option key="TCP-ACTIVE" label="TCP主动模式" :disabled="true" value="TCP-ACTIVE"></el-option>
+            <el-option key="TCP-ACTIVE" label="TCP主动模式"  value="TCP-ACTIVE"></el-option>
             <el-option key="TCP-PASSIVE" label="TCP被动模式" value="TCP-PASSIVE"></el-option>
           </el-select>
         </template>
@@ -39,8 +41,8 @@
       <el-table-column label="状态" min-width="120">
         <template slot-scope="scope">
           <div slot="reference" class="name-wrapper">
-            <el-tag size="medium" v-if="scope.row.online == 1">在线</el-tag>
-            <el-tag size="medium" type="info" v-if="scope.row.online == 0">离线</el-tag>
+            <el-tag size="medium" v-if="scope.row.onLine">在线</el-tag>
+            <el-tag size="medium" type="info" v-if="!scope.row.onLine">离线</el-tag>
           </div>
         </template>
       </el-table-column>

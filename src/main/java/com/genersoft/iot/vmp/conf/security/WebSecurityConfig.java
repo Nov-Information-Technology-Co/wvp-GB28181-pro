@@ -1,7 +1,7 @@
 package com.genersoft.iot.vmp.conf.security;
 
 import com.genersoft.iot.vmp.conf.UserSetting;
-import org.junit.jupiter.api.Order;
+import org.springframework.core.annotation.Order;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,16 +47,6 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
      * 登出成功的处理
      */
     @Autowired
-    private LoginFailureHandler loginFailureHandler;
-    /**
-     * 登录成功的处理
-     */
-    @Autowired
-    private LoginSuccessHandler loginSuccessHandler;
-    /**
-     * 登出成功的处理
-     */
-    @Autowired
     private LogoutHandler logoutHandler;
     /**
      * 未登录的处理
@@ -72,22 +62,23 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
      **/
     @Override
     public void configure(WebSecurity web) {
-
-        ArrayList<String> matchers = new ArrayList<>();
-        matchers.add("/");
-        matchers.add("/#/**");
-        matchers.add("/static/**");
-        matchers.add("/index.html");
-        matchers.add("/doc.html");
-        matchers.add("/webjars/**");
-        matchers.add("/swagger-resources/**");
-        matchers.add("/v3/api-docs/**");
-        matchers.add("/js/**");
-        matchers.add("/api/device/query/snap/**");
-        matchers.add("/record_proxy/*/**");
-        matchers.addAll(userSetting.getInterfaceAuthenticationExcludes());
-        // 可以直接访问的静态数据
-        web.ignoring().antMatchers(matchers.toArray(new String[0]));
+        if (userSetting.isInterfaceAuthentication()) {
+            ArrayList<String> matchers = new ArrayList<>();
+            matchers.add("/");
+            matchers.add("/#/**");
+            matchers.add("/static/**");
+            matchers.add("/index.html");
+            matchers.add("/doc.html");
+            matchers.add("/webjars/**");
+            matchers.add("/swagger-resources/**");
+            matchers.add("/v3/api-docs/**");
+            matchers.add("/js/**");
+            matchers.add("/api/device/query/snap/**");
+            matchers.add("/record_proxy/*/**");
+            matchers.addAll(userSetting.getInterfaceAuthenticationExcludes());
+            // 可以直接访问的静态数据
+            web.ignoring().antMatchers(matchers.toArray(new String[0]));
+        }
     }
 
     /**

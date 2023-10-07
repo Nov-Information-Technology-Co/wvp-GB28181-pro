@@ -16,8 +16,6 @@ public class VideoManagerConstants {
 
 	public static final String MEDIA_SERVERS_ONLINE_PREFIX = "VMP_MEDIA_ONLINE_SERVERS_";
 
-	public static final String MEDIA_STREAM_PREFIX = "VMP_MEDIA_STREAM";
-
 	public static final String DEVICE_PREFIX = "VMP_DEVICE_";
 
 	// 设备同步完成
@@ -28,9 +26,10 @@ public class VideoManagerConstants {
 	public static final String KEEPLIVEKEY_PREFIX = "VMP_KEEPALIVE_";
 
 	// TODO 此处多了一个_，暂不修改
-	public static final String PLAYER_PREFIX = "VMP_PLAYER_";
-	public static final String PLAY_BLACK_PREFIX = "VMP_PLAYBACK_";
-	public static final String DOWNLOAD_PREFIX = "VMP_DOWNLOAD_";
+	public static final String INVITE_PREFIX = "VMP_INVITE";
+	public static final String PLAYER_PREFIX = "VMP_INVITE_PLAY_";
+	public static final String PLAY_BLACK_PREFIX = "VMP_INVITE_PLAYBACK_";
+	public static final String DOWNLOAD_PREFIX = "VMP_INVITE_DOWNLOAD_";
 
 	public static final String PLATFORM_KEEPALIVE_PREFIX = "VMP_PLATFORM_KEEPALIVE_";
 
@@ -101,11 +100,31 @@ public class VideoManagerConstants {
 	 */
 	public static final String VM_MSG_STREAM_PUSH_REQUESTED = "VM_MSG_STREAM_PUSH_REQUESTED";
 
+	/**
+	 * redis 消息通知上级平台开始观看流
+	 */
+	public static final String VM_MSG_STREAM_START_PLAY_NOTIFY = "VM_MSG_STREAM_START_PLAY_NOTIFY";
+
+	/**
+	 * redis 消息通知上级平台停止观看流
+	 */
+	public static final String VM_MSG_STREAM_STOP_PLAY_NOTIFY = "VM_MSG_STREAM_STOP_PLAY_NOTIFY";
+
+	/**
+	 * redis 消息接收关闭一个推流
+	 */
+	public static final String VM_MSG_STREAM_PUSH_CLOSE_REQUESTED = "VM_MSG_STREAM_PUSH_CLOSE_REQUESTED";
+
 
 	/**
 	 * redis 消息通知平台通知设备推流结果
 	 */
 	public static final String VM_MSG_STREAM_PUSH_RESPONSE = "VM_MSG_STREAM_PUSH_RESPONSE";
+
+	/**
+	 * redis 通知平台关闭推流
+	 */
+	public static final String VM_MSG_STREAM_PUSH_CLOSE = "VM_MSG_STREAM_PUSH_CLOSE";
 
 	/**
 	 * redis 消息请求所有的在线通道
@@ -122,6 +141,7 @@ public class VideoManagerConstants {
 	 */
 	public static final String VM_MSG_SUBSCRIBE_ALARM = "alarm";
 
+
 	/**
 	 * 报警通知的发送 （收到redis发出的通知，转发给其他平台）
 	 */
@@ -137,6 +157,10 @@ public class VideoManagerConstants {
 
 	public static final String WVP_STREAM_GB_ID_PREFIX = "memberNo_";
 	public static final String WVP_STREAM_GPS_MSG_PREFIX = "WVP_STREAM_GPS_MSG_";
+	public static final String WVP_OTHER_SEND_RTP_INFO = "VMP_OTHER_SEND_RTP_INFO_";
+	public static final String WVP_OTHER_SEND_PS_INFO = "VMP_OTHER_SEND_PS_INFO_";
+	public static final String WVP_OTHER_RECEIVE_RTP_INFO = "VMP_OTHER_RECEIVE_RTP_INFO_";
+	public static final String WVP_OTHER_RECEIVE_PS_INFO = "VMP_OTHER_RECEIVE_PS_INFO_";
 
 	/**
 	 * Redis Const

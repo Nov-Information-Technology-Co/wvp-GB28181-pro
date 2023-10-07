@@ -14,6 +14,7 @@ import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
 import com.genersoft.iot.vmp.service.IDeviceChannelService;
 import com.genersoft.iot.vmp.service.IDeviceService;
+import com.genersoft.iot.vmp.service.IInviteStreamService;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.storager.IVideoManagerStorage;
 import com.genersoft.iot.vmp.vmanager.bean.BaseTree;
@@ -35,6 +36,7 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
@@ -62,6 +64,9 @@ public class DeviceQuery {
 
 	@Autowired
 	private IRedisCatchStorage redisCatchStorage;
+
+	@Autowired
+	private IInviteStreamService inviteStreamService;
 	
 	@Autowired
 	private SIPCommander cmder;
@@ -184,7 +189,7 @@ public class DeviceQuery {
 		// 清除redis记录
 		boolean isSuccess = deviceService.delete(deviceId);
 		if (isSuccess) {
-			redisCatchStorage.clearCatchByDeviceId(deviceId);
+			inviteStreamService.clearInviteInfo(deviceId);
 			// 停止此设备的订阅更新
 			Set<String> allKeys = dynamicTask.getAllKeys();
 			for (String key : allKeys) {
@@ -462,12 +467,16 @@ public class DeviceQuery {
 	@Operation(summary = "请求截图")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
 	@Parameter(name = "channelId", description = "通道国标编号", required = true)
-	public void getSnap(HttpServletResponse resp, @PathVariable String deviceId, @PathVariable String channelId) {
+	@Parameter(name = "mark", description = "标识", required = false)
+	public void getSnap(HttpServletResponse resp, @PathVariable String deviceId, @PathVariable String channelId, @RequestParam(required = false) String mark) {
 
 		try {
-			final InputStream in = Files.newInputStream(new File("snap" + File.separator + deviceId + "_" + channelId + ".jpg").toPath());
+			final InputStream in = Files.newInputStream(new File("snap" + File.separator + deviceId + "_" + channelId + (mark == null? ".jpg": ("_" + mark + ".jpg"))).toPath());
 			resp.setContentType(MediaType.IMAGE_PNG_VALUE);
+			ServletOutputStream outputStream = resp.getOutputStream();
 			IOUtils.copy(in, resp.getOutputStream());
+			in.close();
+			outputStream.close();
 		} catch (IOException e) {
 			resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
 		}

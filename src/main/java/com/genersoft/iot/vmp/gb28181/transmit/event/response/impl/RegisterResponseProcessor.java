@@ -92,7 +92,7 @@ public class RegisterResponseProcessor extends SIPResponseProcessorAbstract {
 			WWWAuthenticateHeader www = (WWWAuthenticateHeader)response.getHeader(WWWAuthenticateHeader.NAME);
 			SipTransactionInfo sipTransactionInfo = new SipTransactionInfo(response);
 			try {
-				sipCommanderForPlatform.register(parentPlatform, sipTransactionInfo, www, null, null, true, platformRegisterInfo.isRegister());
+				sipCommanderForPlatform.register(parentPlatform, sipTransactionInfo, www, null, null, platformRegisterInfo.isRegister());
 			} catch (SipException | InvalidArgumentException | ParseException e) {
 				logger.error("[命令发送失败] 国标级联 再次注册: {}", e.getMessage());
 			}
@@ -102,7 +102,7 @@ public class RegisterResponseProcessor extends SIPResponseProcessorAbstract {
 				SipTransactionInfo sipTransactionInfo = new SipTransactionInfo(response);
 				platformService.online(parentPlatform, sipTransactionInfo);
 			}else {
-				platformService.offline(parentPlatform, false);
+				platformService.offline(parentPlatform, true);
 			}
 
 			// 注册/注销成功移除缓存的信息

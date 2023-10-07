@@ -1,7 +1,7 @@
 package com.genersoft.iot.vmp.conf;
 
-import org.junit.jupiter.api.Order;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -31,7 +31,7 @@ public class UserSetting {
 
     private Boolean recordSip = Boolean.TRUE;
 
-    private Boolean logInDatebase = Boolean.TRUE;
+    private Boolean logInDatabase = Boolean.TRUE;
 
     private Boolean usePushingAsStatus = Boolean.TRUE;
 
@@ -43,14 +43,16 @@ public class UserSetting {
 
     private Boolean pushAuthority = Boolean.TRUE;
 
-    private Boolean gbSendStreamStrict = Boolean.FALSE;
-
     private Boolean syncChannelOnDeviceOnline = Boolean.FALSE;
 
     private Boolean sipLog = Boolean.FALSE;
+    private Boolean sqlLog = Boolean.FALSE;
     private Boolean sendToPlatformsWhenIdLost = Boolean.FALSE;
 
     private Boolean refuseChannelStatusChannelFormNotify = Boolean.FALSE;
+
+    private Boolean deviceStatusNotify = Boolean.FALSE;
+    private Boolean useCustomSsrcForParentInvite = Boolean.TRUE;
 
     private String serverId = "000000";
 
@@ -58,9 +60,17 @@ public class UserSetting {
 
     private String thirdPartyGBIdReg = "[\\s\\S]*";
 
+    private String civilCodeFile = "classpath:civilCode.csv";
+
     private List<String> interfaceAuthenticationExcludes = new ArrayList<>();
 
     private List<String> allowedOrigins = new ArrayList<>();
+
+    private int maxNotifyCountQueue = 10000;
+
+    private int registerAgainAfterTime = 60;
+
+    private boolean registerKeepIntDialog = false;
 
     public Boolean getSavePositionHistory() {
         return savePositionHistory;
@@ -122,12 +132,12 @@ public class UserSetting {
         this.interfaceAuthenticationExcludes = interfaceAuthenticationExcludes;
     }
 
-    public Boolean getLogInDatebase() {
-        return logInDatebase;
+    public Boolean getLogInDatabase() {
+        return logInDatabase;
     }
 
-    public void setLogInDatebase(Boolean logInDatebase) {
-        this.logInDatebase = logInDatebase;
+    public void setLogInDatabase(Boolean logInDatabase) {
+        this.logInDatabase = logInDatabase;
     }
 
     public String getServerId() {
@@ -194,14 +204,6 @@ public class UserSetting {
         this.pushAuthority = pushAuthority;
     }
 
-    public Boolean getGbSendStreamStrict() {
-        return gbSendStreamStrict;
-    }
-
-    public void setGbSendStreamStrict(Boolean gbSendStreamStrict) {
-        this.gbSendStreamStrict = gbSendStreamStrict;
-    }
-
     public Boolean getSyncChannelOnDeviceOnline() {
         return syncChannelOnDeviceOnline;
     }
@@ -256,5 +258,61 @@ public class UserSetting {
 
     public void setRecordPath(String recordPath) {
         this.recordPath = recordPath;
+    }
+
+    public int getMaxNotifyCountQueue() {
+        return maxNotifyCountQueue;
+    }
+
+    public void setMaxNotifyCountQueue(int maxNotifyCountQueue) {
+        this.maxNotifyCountQueue = maxNotifyCountQueue;
+    }
+
+    public Boolean getDeviceStatusNotify() {
+        return deviceStatusNotify;
+    }
+
+    public void setDeviceStatusNotify(Boolean deviceStatusNotify) {
+        this.deviceStatusNotify = deviceStatusNotify;
+    }
+
+    public Boolean getUseCustomSsrcForParentInvite() {
+        return useCustomSsrcForParentInvite;
+    }
+
+    public void setUseCustomSsrcForParentInvite(Boolean useCustomSsrcForParentInvite) {
+        this.useCustomSsrcForParentInvite = useCustomSsrcForParentInvite;
+    }
+
+    public Boolean getSqlLog() {
+        return sqlLog;
+    }
+
+    public void setSqlLog(Boolean sqlLog) {
+        this.sqlLog = sqlLog;
+    }
+
+    public String getCivilCodeFile() {
+        return civilCodeFile;
+    }
+
+    public void setCivilCodeFile(String civilCodeFile) {
+        this.civilCodeFile = civilCodeFile;
+    }
+
+    public int getRegisterAgainAfterTime() {
+        return registerAgainAfterTime;
+    }
+
+    public void setRegisterAgainAfterTime(int registerAgainAfterTime) {
+        this.registerAgainAfterTime = registerAgainAfterTime;
+    }
+
+    public boolean isRegisterKeepIntDialog() {
+        return registerKeepIntDialog;
+    }
+
+    public void setRegisterKeepIntDialog(boolean registerKeepIntDialog) {
+        this.registerKeepIntDialog = registerKeepIntDialog;
     }
 }

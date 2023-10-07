@@ -82,7 +82,7 @@ public class PlatformChannelServiceImpl implements IPlatformChannelService {
         int allCount = 0;
         boolean result = false;
         TransactionStatus transactionStatus = dataSourceTransactionManager.getTransaction(transactionDefinition);
-        int limitCount = 300;
+        int limitCount = 50;
         if (channelReducesToAdd.size() > 0) {
             if (channelReducesToAdd.size() > limitCount) {
                 for (int i = 0; i < channelReducesToAdd.size(); i += limitCount) {
@@ -125,23 +125,26 @@ public class PlatformChannelServiceImpl implements IPlatformChannelService {
     private List<DeviceChannel> getDeviceChannelListByChannelReduceList(List<ChannelReduce> channelReduces, String catalogId, ParentPlatform platform) {
         List<DeviceChannel> deviceChannelList = new ArrayList<>();
         if (channelReduces.size() > 0){
-            PlatformCatalog catalog = catalogManager.select(catalogId);
-            if (catalog == null && !catalogId.equals(platform.getDeviceGBId())) {
+            PlatformCatalog catalog = catalogManager.selectByPlatFormAndCatalogId(platform.getServerGBId(),catalogId);
+            if (catalog == null && catalogId.equals(platform.getDeviceGBId())) {
+                for (ChannelReduce channelReduce : channelReduces) {
+                    DeviceChannel deviceChannel = deviceChannelMapper.queryChannel(channelReduce.getDeviceId(), channelReduce.getChannelId());
+                    deviceChannel.setParental(0);
+                    deviceChannel.setCivilCode(platform.getServerGBDomain());
+                    deviceChannelList.add(deviceChannel);
+                }
+                return deviceChannelList;
+            } else if (catalog == null || !catalogId.equals(platform.getDeviceGBId())) {
                 logger.warn("未查询到目录{}的信息", catalogId);
                 return null;
             }
             for (ChannelReduce channelReduce : channelReduces) {
                 DeviceChannel deviceChannel = deviceChannelMapper.queryChannel(channelReduce.getDeviceId(), channelReduce.getChannelId());
                 deviceChannel.setParental(0);
+                deviceChannel.setCivilCode(catalog.getCivilCode());
+                deviceChannel.setParentId(catalog.getParentId());
+                deviceChannel.setBusinessGroupId(catalog.getBusinessGroupId());
                 deviceChannelList.add(deviceChannel);
-                if (platform.getTreeType().equals(TreeType.CIVIL_CODE)){
-                    deviceChannel.setCivilCode(catalogId);
-                }else if (platform.getTreeType().equals(TreeType.BUSINESS_GROUP)){
-                    deviceChannel.setParentId(catalogId);
-                    if (catalog != null) {
-                        deviceChannel.setBusinessGroupId(catalog.getBusinessGroupId());
-                    }
-                }
             }
         }
         return deviceChannelList;

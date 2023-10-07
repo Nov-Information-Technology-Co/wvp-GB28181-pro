@@ -6,7 +6,7 @@ import com.genersoft.iot.vmp.gb28181.auth.DigestServerAuthenticationHelper;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.RemoteAddressInfo;
 import com.genersoft.iot.vmp.gb28181.bean.SipTransactionInfo;
-import com.genersoft.iot.vmp.gb28181.bean.WvpSipDate;
+import com.genersoft.iot.vmp.gb28181.bean.GbSipDate;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPProcessorObserver;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPSender;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.ISIPRequestProcessor;
@@ -80,39 +80,32 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
     public void process(RequestEvent evt) {
         try {
             RequestEventExt evtExt = (RequestEventExt) evt;
-            String requestAddress = evtExt.getRemoteIpAddress() + ":" + evtExt.getRemotePort();
-            logger.info("[注册请求] 开始处理: {}", requestAddress);
-//            MBeanServer beanServer = ManagementFactory.getPlatformMBeanServer();
-//            QueryExp protocol = Query.match(Query.attr("protocol"), Query.value("HTTP/1.1"));
-////            ObjectName name = new ObjectName("*:type=Connector,*");
-//            ObjectName name = new ObjectName("*:*");
-//            Set<ObjectName> objectNames = beanServer.queryNames(name, protocol);
-//            for (ObjectName objectName : objectNames) {
-//                String catalina = objectName.getDomain();
-//                if ("Catalina".equals(catalina)) {
-//                    System.out.println(objectName.getKeyProperty("port"));
-//                }
-//            }
 
-//            System.out.println(ServiceInfo.getServerPort());
             SIPRequest request = (SIPRequest)evt.getRequest();
             Response response = null;
             boolean passwordCorrect = false;
             // 注册标志
-            boolean registerFlag;
+            boolean registerFlag = true;
+            if (request.getExpires().getExpires() == 0) {
+                // 注销成功
+                registerFlag = false;
+            }
             FromHeader fromHeader = (FromHeader) request.getHeader(FromHeader.NAME);
             AddressImpl address = (AddressImpl) fromHeader.getAddress();
             SipUri uri = (SipUri) address.getURI();
             String deviceId = uri.getUser();
+
             Device device = deviceService.getDevice(deviceId);
 
             RemoteAddressInfo remoteAddressInfo = SipUtils.getRemoteAddressFromRequest(request,
                     userSetting.getSipUseSourceIpAsRemoteAddress());
-
+            String requestAddress = remoteAddressInfo.getIp() + ":" + remoteAddressInfo.getPort();
+            String title = registerFlag ? "[注册请求]": "[注销请求]";
+                    logger.info(title + "设备：{}, 开始处理: {}", deviceId, requestAddress);
             if (device != null &&
                 device.getSipTransactionInfo() != null &&
                 request.getCallIdHeader().getCallId().equals(device.getSipTransactionInfo().getCallId())) {
-                logger.info("[注册请求] 注册续订: {}", device.getDeviceId());
+                logger.info(title + "设备：{}, 注册续订: {}",device.getDeviceId(), device.getDeviceId());
                 device.setExpires(request.getExpires().getExpires());
                 device.setIp(remoteAddressInfo.getIp());
                 device.setPort(remoteAddressInfo.getPort());
@@ -132,7 +125,7 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
             String password = (device != null && !ObjectUtils.isEmpty(device.getPassword()))? device.getPassword() : sipConfig.getPassword();
             AuthorizationHeader authHead = (AuthorizationHeader) request.getHeader(AuthorizationHeader.NAME);
             if (authHead == null && !ObjectUtils.isEmpty(password)) {
-                logger.info("[注册请求] 回复401: {}", requestAddress);
+                logger.info(title + " 设备：{}, 回复401: {}",deviceId, requestAddress);
                 response = getMessageFactory().createResponse(Response.UNAUTHORIZED, request);
                 new DigestServerAuthenticationHelper().generateChallenge(getHeaderFactory(), response, sipConfig.getDomain());
                 sipSender.transmitRequest(request.getLocalAddress().getHostAddress(), response);
@@ -147,7 +140,7 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
                 // 注册失败
                 response = getMessageFactory().createResponse(Response.FORBIDDEN, request);
                 response.setReasonPhrase("wrong password");
-                logger.info("[注册请求] 密码/SIP服务器ID错误, 回复403: {}", requestAddress);
+                logger.info(title + " 设备：{}, 密码/SIP服务器ID错误, 回复403: {}", deviceId, requestAddress);
                 sipSender.transmitRequest(request.getLocalAddress().getHostAddress(), response);
                 return;
             }
@@ -157,8 +150,8 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
             // 添加date头
             SIPDateHeader dateHeader = new SIPDateHeader();
             // 使用自己修改的
-            WvpSipDate wvpSipDate = new WvpSipDate(Calendar.getInstance(Locale.ENGLISH).getTimeInMillis());
-            dateHeader.setDate(wvpSipDate);
+            GbSipDate gbSipDate = new GbSipDate(Calendar.getInstance(Locale.ENGLISH).getTimeInMillis());
+            dateHeader.setDate(gbSipDate);
             response.addHeader(dateHeader);
 
             if (request.getExpires() == null) {
@@ -176,10 +169,20 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
                 device.setStreamMode("UDP");
                 device.setCharset("GB2312");
                 device.setGeoCoordSys("WGS84");
-                device.setTreeType("CivilCode");
                 device.setDeviceId(deviceId);
-                device.setOnline(0);
+                device.setOnLine(false);
+            }else {
+                if (ObjectUtils.isEmpty(device.getStreamMode())) {
+                    device.setStreamMode("UDP");
+                }
+                if (ObjectUtils.isEmpty(device.getCharset())) {
+                    device.setCharset("GB2312");
+                }
+                if (ObjectUtils.isEmpty(device.getGeoCoordSys())) {
+                    device.setGeoCoordSys("WGS84");
+                }
             }
+
             device.setIp(remoteAddressInfo.getIp());
             device.setPort(remoteAddressInfo.getPort());
             device.setHostAddress(remoteAddressInfo.getIp().concat(":").concat(String.valueOf(remoteAddressInfo.getPort())));
@@ -220,8 +223,8 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
         // 添加date头
         SIPDateHeader dateHeader = new SIPDateHeader();
         // 使用自己修改的
-        WvpSipDate wvpSipDate = new WvpSipDate(Calendar.getInstance(Locale.ENGLISH).getTimeInMillis());
-        dateHeader.setDate(wvpSipDate);
+        GbSipDate gbSipDate = new GbSipDate(Calendar.getInstance(Locale.ENGLISH).getTimeInMillis());
+        dateHeader.setDate(gbSipDate);
         response.addHeader(dateHeader);
 
         // 添加Contact头

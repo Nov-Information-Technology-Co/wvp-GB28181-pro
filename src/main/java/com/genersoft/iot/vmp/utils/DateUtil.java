@@ -1,12 +1,15 @@
 package com.genersoft.iot.vmp.utils;
 
 
+import org.apache.commons.lang3.ObjectUtils;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAccessor;
 
 import java.util.Locale;
@@ -32,11 +35,17 @@ public class DateUtil {
      */
     public static final String PATTERN = "yyyy-MM-dd HH:mm:ss";
 
+    /**
+     * wvp内部统一时间格式
+     */
+    public static final String URL_PATTERN = "yyyyMMddHHmmss";
+
     public static final String zoneStr = "Asia/Shanghai";
 
     public static final DateTimeFormatter formatterCompatibleISO8601 = DateTimeFormatter.ofPattern(ISO8601_COMPATIBLE_PATTERN, Locale.getDefault()).withZone(ZoneId.of(zoneStr));
     public static final DateTimeFormatter formatterISO8601 = DateTimeFormatter.ofPattern(ISO8601_PATTERN, Locale.getDefault()).withZone(ZoneId.of(zoneStr));
     public static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern(PATTERN, Locale.getDefault()).withZone(ZoneId.of(zoneStr));
+    public static final DateTimeFormatter urlFormatter = DateTimeFormatter.ofPattern(URL_PATTERN, Locale.getDefault()).withZone(ZoneId.of(zoneStr));
 
 	public static String yyyy_MM_dd_HH_mm_ssToISO8601(String formatTime) {
 
@@ -45,6 +54,10 @@ public class DateUtil {
 	
 	public static String ISO8601Toyyyy_MM_dd_HH_mm_ss(String formatTime) {
         return formatter.format(formatterCompatibleISO8601.parse(formatTime));
+    }
+
+	public static String urlToyyyy_MM_dd_HH_mm_ss(String formatTime) {
+        return formatter.format(urlFormatter.parse(formatTime));
     }
 
     /**
@@ -68,6 +81,16 @@ public class DateUtil {
     }
 
     /**
+     * 获取当前时间
+     * @return
+     */
+    public static String getNowForUrl() {
+        LocalDateTime nowDateTime = LocalDateTime.now();
+        return urlFormatter.format(nowDateTime);
+    }
+
+
+    /**
      * 格式校验
      * @param timeStr 时间字符串
      * @param dateTimeFormatter 待校验的格式
@@ -85,5 +108,13 @@ public class DateUtil {
     public static String getNowForISO8601() {
         LocalDateTime nowDateTime = LocalDateTime.now();
         return formatterISO8601.format(nowDateTime);
+    }
+
+    public static long getDifferenceForNow(String keepaliveTime) {
+        if (ObjectUtils.isEmpty(keepaliveTime)) {
+            return 0;
+        }
+        Instant beforeInstant = Instant.from(formatter.parse(keepaliveTime));
+        return ChronoUnit.MILLIS.between(beforeInstant, Instant.now());
     }
 }

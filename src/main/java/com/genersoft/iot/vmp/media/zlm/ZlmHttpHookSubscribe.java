@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.genersoft.iot.vmp.media.zlm.dto.HookType;
 import com.genersoft.iot.vmp.media.zlm.dto.IHookSubscribe;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
+import com.genersoft.iot.vmp.media.zlm.dto.hook.HookParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,7 +27,7 @@ public class ZlmHttpHookSubscribe {
 
     @FunctionalInterface
     public interface Event{
-        void response(MediaServerItem mediaServerItem, JSONObject response);
+        void response(MediaServerItem mediaServerItem, HookParam hookParam);
     }
 
     private Map<HookType, Map<IHookSubscribe, ZlmHttpHookSubscribe.Event>> allSubscribes = new ConcurrentHashMap<>();
@@ -98,7 +99,10 @@ public class ZlmHttpHookSubscribe {
 
             if (!CollectionUtils.isEmpty(entriesToRemove)) {
                 for (Map.Entry<IHookSubscribe, ZlmHttpHookSubscribe.Event> entry : entriesToRemove) {
-                    entries.remove(entry);
+                    eventMap.remove(entry.getKey());
+                }
+                if (eventMap.size() == 0) {
+                    allSubscribes.remove(hookSubscribe.getHookType());
                 }
             }
 
@@ -134,9 +138,9 @@ public class ZlmHttpHookSubscribe {
     /**
      * 对订阅数据进行过期清理
      */
-    @Scheduled(cron="0 0/5 * * * ?")   //每5分钟执行一次
+//    @Scheduled(cron="0 0/5 * * * ?")   //每5分钟执行一次
+    @Scheduled(fixedRate = 2 * 1000)
     public void execute(){
-
         Instant instant = Instant.now().minusMillis(TimeUnit.MINUTES.toMillis(5));
         int total = 0;
         for (HookType hookType : allSubscribes.keySet()) {

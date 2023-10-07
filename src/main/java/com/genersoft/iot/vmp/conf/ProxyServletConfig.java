@@ -2,11 +2,10 @@ package com.genersoft.iot.vmp.conf;
 
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.service.IMediaServerService;
-import org.apache.catalina.connector.ClientAbortException;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
-import org.junit.jupiter.api.Order;
+import org.springframework.core.annotation.Order;
 import org.mitre.dsmiley.httpproxy.ProxyServlet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +18,7 @@ import org.springframework.util.ObjectUtils;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.ConnectException;
 
@@ -63,6 +63,18 @@ public class ProxyServletConfig {
                 }
             }
             return queryStr;
+        }
+
+
+        @Override
+        protected HttpResponse doExecute(HttpServletRequest servletRequest, HttpServletResponse servletResponse,
+                                         HttpRequest proxyRequest) throws IOException {
+            HttpResponse response = super.doExecute(servletRequest, servletResponse, proxyRequest);
+            response.removeHeaders("Access-Control-Allow-Origin");
+            response.setHeader("Access-Control-Allow-Credentials","true");
+            response.removeHeaders("Access-Control-Allow-Credentials");
+
+            return response;
         }
 
         /**
@@ -182,6 +194,18 @@ public class ProxyServletConfig {
             return queryStr;
         }
 
+
+        @Override
+        protected HttpResponse doExecute(HttpServletRequest servletRequest, HttpServletResponse servletResponse,
+                                         HttpRequest proxyRequest) throws IOException {
+            HttpResponse response = super.doExecute(servletRequest, servletResponse, proxyRequest);
+            String origin = servletRequest.getHeader("origin");
+            response.setHeader("Access-Control-Allow-Origin",origin);
+            response.setHeader("Access-Control-Allow-Credentials","true");
+
+            return response;
+        }
+
         /**
          * 异常处理
          */
@@ -194,11 +218,11 @@ public class ProxyServletConfig {
             } catch (IOException ioException) {
                 if (ioException instanceof ConnectException) {
                     logger.error("录像服务 连接失败");
-                }else if (ioException instanceof ClientAbortException) {
-                    /**
-                     * TODO 使用这个代理库实现代理在遇到代理视频文件时，如果是206结果，会遇到报错蛋市目前功能正常，
-                     * TODO 暂时去除异常处理。后续使用其他代理框架修改测试
-                     */
+//                }else if (ioException instanceof ClientAbortException) {
+//                    /**
+//                     * TODO 使用这个代理库实现代理在遇到代理视频文件时，如果是206结果，会遇到报错蛋市目前功能正常，
+//                     * TODO 暂时去除异常处理。后续使用其他代理框架修改测试
+//                     */
 
                 }else {
                     logger.error("录像服务 代理失败： ", e);

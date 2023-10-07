@@ -2,6 +2,7 @@ package com.genersoft.iot.vmp.gb28181;
 
 import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.conf.UserSetting;
+import com.genersoft.iot.vmp.gb28181.bean.GbStringMsgParserFactory;
 import com.genersoft.iot.vmp.gb28181.conf.DefaultProperties;
 import com.genersoft.iot.vmp.gb28181.transmit.ISIPProcessorObserver;
 import gov.nist.javax.sip.SipProviderImpl;
@@ -36,8 +37,6 @@ public class SipLayer implements CommandLineRunner {
 	private final Map<String, SipProviderImpl> tcpSipProviderMap = new ConcurrentHashMap<>();
 	private final Map<String, SipProviderImpl> udpSipProviderMap = new ConcurrentHashMap<>();
 
-	private SipFactory sipFactory;
-
 	@Override
 	public void run(String... args) {
 		List<String> monitorIps = new ArrayList<>();
@@ -50,8 +49,7 @@ public class SipLayer implements CommandLineRunner {
 			monitorIps.add(sipConfig.getIp());
 		}
 
-		sipFactory = SipFactory.getInstance();
-		sipFactory.setPathName("gov.nist");
+		SipFactory.getInstance().setPathName("gov.nist");
 		if (monitorIps.size() > 0) {
 			for (String monitorIp : monitorIps) {
 				addListeningPoint(monitorIp, sipConfig.getPort());
@@ -65,9 +63,10 @@ public class SipLayer implements CommandLineRunner {
 	private void addListeningPoint(String monitorIp, int port){
 		SipStackImpl sipStack;
 		try {
-			sipStack = (SipStackImpl)sipFactory.createSipStack(DefaultProperties.getProperties(monitorIp, userSetting.getSipLog()));
+			sipStack = (SipStackImpl)SipFactory.getInstance().createSipStack(DefaultProperties.getProperties("GB28181_SIP", userSetting.getSipLog()));
+			sipStack.setMessageParserFactory(new GbStringMsgParserFactory());
 		} catch (PeerUnavailableException e) {
-			logger.error("[Sip Server] SIP服务启动失败， 监听地址{}失败,请检查ip是否正确", monitorIp);
+			logger.error("[SIP SERVER] SIP服务启动失败， 监听地址{}失败,请检查ip是否正确", monitorIp);
 			return;
 		}
 
@@ -78,13 +77,12 @@ public class SipLayer implements CommandLineRunner {
 			tcpSipProvider.setDialogErrorsAutomaticallyHandled();
 			tcpSipProvider.addSipListener(sipProcessorObserver);
 			tcpSipProviderMap.put(monitorIp, tcpSipProvider);
-
-			logger.info("[Sip Server] tcp://{}:{} 启动成功", monitorIp, port);
+			logger.info("[SIP SERVER] tcp://{}:{} 启动成功", monitorIp, port);
 		} catch (TransportNotSupportedException
 				 | TooManyListenersException
 				 | ObjectInUseException
 				 | InvalidArgumentException e) {
-			logger.error("[Sip Server] tcp://{}:{} SIP服务启动失败,请检查端口是否被占用或者ip是否正确"
+			logger.error("[SIP SERVER] tcp://{}:{} SIP服务启动失败,请检查端口是否被占用或者ip是否正确"
 					, monitorIp, port);
 		}
 
@@ -96,18 +94,14 @@ public class SipLayer implements CommandLineRunner {
 
 			udpSipProviderMap.put(monitorIp, udpSipProvider);
 
-			logger.info("[Sip Server] udp://{}:{} 启动成功", monitorIp, port);
+			logger.info("[SIP SERVER] udp://{}:{} 启动成功", monitorIp, port);
 		} catch (TransportNotSupportedException
 				 | TooManyListenersException
 				 | ObjectInUseException
 				 | InvalidArgumentException e) {
-			logger.error("[Sip Server] udp://{}:{} SIP服务启动失败,请检查端口是否被占用或者ip是否正确"
+			logger.error("[SIP SERVER] udp://{}:{} SIP服务启动失败,请检查端口是否被占用或者ip是否正确"
 					, monitorIp, port);
 		}
-	}
-
-	public SipFactory getSipFactory() {
-		return sipFactory;
 	}
 
 	public SipProviderImpl getUdpSipProvider(String ip) {

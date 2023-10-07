@@ -1,10 +1,12 @@
 package com.genersoft.iot.vmp.service;
 
+import com.genersoft.iot.vmp.common.CommonCallback;
 import com.genersoft.iot.vmp.media.zlm.ZLMServerConfig;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.media.zlm.dto.ServerKeepaliveData;
 import com.genersoft.iot.vmp.service.bean.MediaServerLoad;
 import com.genersoft.iot.vmp.service.bean.SSRCInfo;
+import com.genersoft.iot.vmp.vmanager.bean.RecordFile;
 
 import java.util.List;
 
@@ -43,13 +45,13 @@ public interface IMediaServerService {
 
     void updateVmServer(List<MediaServerItem>  mediaServerItemList);
 
-    SSRCInfo openRTPServer(MediaServerItem mediaServerItem, String streamId, boolean ssrcCheck, boolean isPlayback);
-
-    SSRCInfo openRTPServer(MediaServerItem mediaServerItem, String streamId, String ssrc, boolean ssrcCheck, boolean isPlayback);
-
-    SSRCInfo openRTPServer(MediaServerItem mediaServerItem, String streamId, String ssrc, boolean ssrcCheck, boolean isPlayback, Integer port);
+    SSRCInfo openRTPServer(MediaServerItem mediaServerItem, String streamId, String ssrc, boolean ssrcCheck,
+                           boolean isPlayback, Integer port, Boolean reUsePort, Integer tcpMode);
 
     void closeRTPServer(MediaServerItem mediaServerItem, String streamId);
+
+    void closeRTPServer(MediaServerItem mediaServerItem, String streamId, CommonCallback<Boolean> callback);
+    Boolean updateRtpServerSSRC(MediaServerItem mediaServerItem, String streamId, String ssrc);
 
     void closeRTPServer(String mediaServerId, String streamId);
 
@@ -92,4 +94,14 @@ public interface IMediaServerService {
      * @return
      */
     MediaServerLoad getLoad(MediaServerItem mediaServerItem);
+
+    /**
+     * 按时间查找录像文件
+     */
+    List<RecordFile> getRecords(String app, String stream, String startTime, String endTime, List<MediaServerItem> mediaServerItems);
+
+    /**
+     * 查找存在录像文件的时间
+     */
+    List<String> getRecordDates(String app, String stream, int year, int month, List<MediaServerItem> mediaServerItems);
 }
